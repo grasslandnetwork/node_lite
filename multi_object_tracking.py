@@ -37,14 +37,16 @@ gl_nodes = gl_db.collection(u'nodes')
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
+ap.add_argument("--display", type=int, default=1,
+                help="whether or not to display frames in UI")
 ap.add_argument("--video", type=str,
-    help="path to input video file")
+                help="path to input video file")
 ap.add_argument("--picamera", type=int, default=-1,
-    help="whether or not the Raspberry Pi camera should be used")
+                help="whether or not the Raspberry Pi camera should be used")
 ap.add_argument("--tracker", type=str, default="mosse",
-    help="OpenCV object tracker type")
+                help="OpenCV object tracker type")
 ap.add_argument("--num_workers", type=int, default=5,
-    help="Number of Workers")
+                help="Number of Workers")
 args = vars(ap.parse_args())
 
 # initialize a dictionary that maps strings to their corresponding
@@ -74,7 +76,6 @@ def get_detections_error_callback(the_exception):
 
 def get_detections(frame_number,frame):
     try:
-        print("starting get_detections")
         image = Image.fromarray(frame) # Remember Opencv images are in 'BGR'
         file_name_ext = 'frame_'+str(frame_number)+'.jpg'
         file_path = '/tmp/'+file_name_ext
@@ -146,8 +147,12 @@ rw.set_transform(dynamic=True, gl_nodes=gl_nodes)
 
 
 first_frame_detected = False
-display = True
-worker_running = False
+if args["display"] == 1:
+    display = True
+else:
+    display = False
+    
+run_worker = False
 
 count_read_frame = 0
 count_write_frame = 1
@@ -177,13 +182,28 @@ def worker():
     global worker_fps
     try:
         frame_loop_count = 0
-        while True:
+        while run_worker:
             # Pull first/next frame tuple from p_queue
             #queue_get_start_time = time.time()
-            frame_number, frame_dict = p_queue.get()
+            try:
+                frame_number, frame_dict = p_queue.get(timeout=20)
+            except:
+                # If there are no more frames being put into p_queue, stop the thread
+                print("No More Frames In p_queue")
+                return
+            
             #print("queue_get_start_time Time:", time.time()-queue_get_start_time)
 
             if frame_number > frame_loop_count:
+                p_queue.task_done() 
+                '''
+                This tracking loop has outpaced our actual frames because of our "detections" bottleneck
+                Since we're adding the same frame back to p_queue again, an act which increases the task 
+                count, calling .task_done() ensures the count of unfinished tasks does not exceed the 
+                number of actual frames or else .join() will never stop blocking because it assumes
+                that there are more tasks/frames to complete than we actually have. 
+                https://docs.python.org/3.4/library/queue.html#queue.Queue.join 
+                '''
                 p_queue.put((frame_number, frame_dict))
             else:
                 frame_loop_count += 1
@@ -339,8 +359,7 @@ try:
 
         # check to see if we have reached the end of the stream
         if frame is None:
-            print("REACHED END OF STREAM")
-            print("Captured "+str(main_fps._numFrames)+ " frames")
+            print("REACHED END OF CAMERA/VIDEO STREAM")
             break
 
         # If we use threading (imutils.video.VideoStream/FileVideoStream), then we don't want to process the same frame twice
@@ -376,7 +395,7 @@ try:
 
                 #print("called apply_async")
 
-                print("queue size")
+                print("p_queue size")
                 print(p_queue.qsize())
 
                 if main_fps._numFrames == 0:
@@ -398,15 +417,15 @@ try:
 
         
         
-        if first_frame_detected and not worker_running:
+        if first_frame_detected and not run_worker:
             print("about to start")
+            run_worker = True
 
             t = Thread(target=worker, args=())
             t.daemon = True
             t.start()
 
             #pool.apply_async(worker) # Doesn't work. Program freezes
-            worker_running = True
 
 
 
@@ -425,13 +444,10 @@ finally:
     p_queue.join()
     print("CLOSING POOL")
     pool.close()
-    #worker_pool.close()
     print("TERMINATING POOL")
     pool.terminate()
-    #worker_pool.terminate()
 
     pool.join()
-    #worker_pool.join()
 
     vs.stop()
     # if we are using a webcam, release the pointer
