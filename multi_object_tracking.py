@@ -26,6 +26,7 @@ import json
 import sys
 from threading import Thread
 import detection_visualization_util
+from random import randint
 
 # Use a service account
 cred = credentials.Certificate(os.environ['FIREBASE_CREDENTIALS'])
@@ -235,7 +236,9 @@ def worker():
 
 
                     manual = False
-
+                    if display:
+                        colors = [] # For display when testing consistent track association
+                        
                     if manual:
                         bbox = cv2.selectROI("Frame", this_frame, fromCenter=False, showCrosshair=True)
 
@@ -247,6 +250,9 @@ def worker():
                             xmin, ymin, xmax, ymax = bbox
                         
                             tracker_boxes[idx] = (xmin, ymin, xmax-xmin, ymax-ymin)
+
+                            if display:
+                                colors.append((randint(0, 255), randint(0, 255), randint(0, 255)))
 
 
                         
@@ -288,13 +294,13 @@ def worker():
                     
                 if display:
                     # Draw tracker boxes on frame
-                    for bbox in tracker_boxes:
+                    for idx, bbox in enumerate(tracker_boxes):
                         #(xmin, xmax, ymin, ymax) = [int(v) for v in box]
                         #cv2.rectangle(this_frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1)
 
                         p1 = (int(bbox[0]), int(bbox[1]))
                         p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-                        cv2.rectangle(this_frame, p1, p2, (0,255,0), 2)
+                        cv2.rectangle(this_frame, p1, p2, colors[idx], 2)
 
                     
                     # show the output frame
