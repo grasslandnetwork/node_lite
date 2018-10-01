@@ -540,14 +540,14 @@ def tracking_loop():
 
 
                 if display:
-                    # # Draw tracker boxes on frame
-                    # for idx, bbox in enumerate(tracker_boxes):
-                    #     #(xmin, xmax, ymin, ymax) = [int(v) for v in box]
-                    #     #cv2.rectangle(this_frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1)
+                    # Draw tracker boxes on frame
+                    for idx, bbox in enumerate(tracker_boxes):
+                        #(xmin, xmax, ymin, ymax) = [int(v) for v in box]
+                        #cv2.rectangle(this_frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1)
 
-                    #     p1 = (int(bbox[0]), int(bbox[1]))
-                    #     p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-                    #     cv2.rectangle(this_frame, p1, p2, colors[idx], 2)
+                        p1 = (int(bbox[0]), int(bbox[1]))
+                        p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
+                        cv2.rectangle(this_frame, p1, p2, colors[idx], 2)
 
                     
                     # show the output frame
