@@ -46,7 +46,9 @@ ap.add_argument("--video", type=str,
 ap.add_argument("--picamera", type=int, default=-1,
                 help="whether or not the Raspberry Pi camera should be used")
 ap.add_argument("--rotation", type=int, default=0,
-                help="Sets camera's clockwise rotation. Valid values are 0, 90, 180, and 270.")
+                help="Sets Rasperry Pi camera's clockwise rotation. Valid values are 0, 90, 180, and 270.")
+ap.add_argument("--dynamic_framerate", type=int, default=1,
+                help="Allows camera framerate to be adjusted according to how fast frames are being processed.")
 ap.add_argument("--tracker", type=str, default="mosse",
                 help="OpenCV object tracker type")
 ap.add_argument("--num_workers", type=int, default=5,
@@ -82,6 +84,9 @@ p_queue_max = 300
 i_queue = Queue() # input queue    
 o_queue = Queue(maxsize=o_queue_max) # output queue
 p_queue = PriorityQueue(maxsize=p_queue_max) # priority queue
+framerate_queue = Queue(maxsize=5)
+
+dynamic_framerate = False
 
 def delete_from_s3(s3_bucket, file_name_ext):
     try:
@@ -195,7 +200,9 @@ if not args.get("video", False):
     print("[INFO] Warming up camera...")
     time.sleep(3)
 
-    vs.camera.rotation = args["rotation"]
+    if args["picamera"] == 1 or args["picamera"] == True:
+        vs.camera.rotation = args["rotation"]
+        dynamic_framerate = args["dynamic_framerate"]
     
     # otherwise, grab a reference to the video file
 else:
@@ -259,6 +266,11 @@ def tracking_loop():
                 current_tracking_loop_fps = tracking_loop_fps._numFrames / (datetime.now() - tracking_loop_fps._start).total_seconds()
                 print("[INFO] approx. Tracking_Loop Running FPS: {:.2f}".format(current_tracking_loop_fps))
 
+
+                # Send new framerate to camera
+                if dynamic_framerate and not framerate_queue.full():
+                    framerate_queue.put(current_tracking_loop_fps)
+                
             try:
                 if p_queue.full():
                     print("p_queue FULL .......................................................")
@@ -607,7 +619,10 @@ try:
 
             # -> if frame is not None and not np.array_equal(last_frame, frame):
 
-
+        if dynamic_framerate and not framerate_queue.empty():
+            new_framerate = framerate_queue.get()
+            vs.camera.framerate = new_framerate
+            print("New camera framerate is", new_framerate)
 
 
         if first_frame_detected and not run_tracking_loop:
