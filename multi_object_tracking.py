@@ -254,7 +254,11 @@ def tracking_loop():
         while True:
             # Pull first/next frame tuple from p_queue
             #queue_get_start_time = time.time()
-            
+
+            if tracking_loop_fps._numFrames % 70 == 0 and not tracking_loop_fps._numFrames == 0:
+                current_tracking_loop_fps = tracking_loop_fps._numFrames / (datetime.now() - tracking_loop_fps._start).total_seconds()
+                print("[INFO] approx. Tracking_Loop Running FPS: {:.2f}".format(current_tracking_loop_fps))
+
             try:
                 if p_queue.full():
                     print("p_queue FULL .......................................................")
