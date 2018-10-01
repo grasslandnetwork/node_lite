@@ -45,6 +45,8 @@ ap.add_argument("--video", type=str,
                 help="path to input video file")
 ap.add_argument("--picamera", type=int, default=-1,
                 help="whether or not the Raspberry Pi camera should be used")
+ap.add_argument("--rotation", type=int, default=0,
+                help="Sets camera's clockwise rotation. Valid values are 0, 90, 180, and 270.")
 ap.add_argument("--tracker", type=str, default="mosse",
                 help="OpenCV object tracker type")
 ap.add_argument("--num_workers", type=int, default=5,
@@ -192,6 +194,8 @@ if not args.get("video", False):
     vs = VideoStream(usePiCamera=args["picamera"], resolution=(800, 464), framerate=framerate).start() # Default to PiCamera
     print("[INFO] Warming up camera...")
     time.sleep(3)
+
+    vs.camera.rotation = args["rotation"]
     
     # otherwise, grab a reference to the video file
 else:
