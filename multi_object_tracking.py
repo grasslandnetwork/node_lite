@@ -66,6 +66,8 @@ OPENCV_OBJECT_TRACKERS = {
 # initialize OpenCV's special multi-object tracker
 trackers = cv2.MultiTracker_create()
 
+detection_frame_width = 800
+tracking_frame_width = 400
 
 s3_res = boto3.resource('s3')
 s3_bucket = s3_res.Bucket('grassland-images')
@@ -163,6 +165,14 @@ def add_to_o_queue(detected_frame_tuple):
         #    print("Adding detection to o_queue")
         #    print("o_queue size")
         #    print(o_queue.qsize())
+
+        # Change detected frame back to size for tracking
+        frame_number, frame_dict = detected_frame_tuple
+        frame = frame_dict['frame']
+        frame = imutils.resize(frame, width=tracking_frame_width)
+        frame_dict['frame'] = frame
+        detected_frame_tuple = (frame_number, frame_dict)
+
         o_queue.put(detected_frame_tuple)
         #else:
         #    print("o_queue full")
@@ -516,7 +526,8 @@ try:
 
             #frame_number += 1
 
-            frame = imutils.resize(frame, width=800)
+            large_frame = imutils.resize(frame, width=tracking_frame_width)
+            frame = imutils.resize(frame, width=tracking_frame_width)
 
 
             if not frame_dimensions_set: # Important For Homography to real world coordinates (lat/long)
@@ -541,7 +552,7 @@ try:
                 # Put frame in i_queue to wait for asynchronous object detection
                 if not o_queue_exceeds_safe_threshold(): # Since all extant i_queue frames eventually go into o_queue and if o_queue exceeds maxsize, program will stop
                     #print("Putting frame in i_queue")
-                    i_queue.put((main_fps._numFrames, frame))
+                    i_queue.put((main_fps._numFrames, large_frame))
                     
                     if main_fps._numFrames == 0:
                         first_frame_detected = True
