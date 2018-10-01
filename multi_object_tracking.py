@@ -210,9 +210,11 @@ if not args.get("video", False):
     print("[INFO] Warming up camera...")
     time.sleep(3)
 
+    if args["dynamic_framerate"] == 1:
+        dynamic_framerate = True
+    
     if args["picamera"] == 1 or args["picamera"] == True:
         vs.camera.rotation = args["rotation"]
-        dynamic_framerate = args["dynamic_framerate"]
     
     # otherwise, grab a reference to the video file
 else:
@@ -255,8 +257,6 @@ print("Sending Wakeup Ping to Lambda function")
 requests.get(lambda_url)
 print("Waiting "+str(lambda_wakeup_duration)+" seconds for function to wake up...")
 time.sleep(lambda_wakeup_duration)
-
-main_fps = FPS().start()
 
 
 def tracking_loop():
@@ -649,6 +649,7 @@ dl.start()
 
 run_feed_loop = True
 try:
+    main_fps = FPS().start()
     while run_feed_loop:
         
         # grab the current frame, then handle if we are using a
@@ -748,9 +749,19 @@ try:
 
         if dynamic_framerate and not framerate_queue.empty():
             new_framerate = framerate_queue.get()
-            vs.camera.framerate = new_framerate
-            print("New camera framerate is", new_framerate)
 
+            if args["picamera"] == 1 or args["picamera"] == True:
+                vs.camera.framerate = new_framerate
+                print("New camera framerate is", new_framerate)
+            else:
+                current_main_fps = main_fps._numFrames / (datetime.now() - main_fps._start).total_seconds()
+                if current_main_fps > new_framerate:  # this loop is reading frames faster than tracking loop can process
+                    # Calculate how many frames ahead this loop is and delay it so the tracking loop can catch up
+                    fps_difference = current_main_fps - new_framerate
+                    time_to_delay = fps_difference/current_main_fps
+                    time.sleep(time_to_delay)
+
+                    
 
         if first_frame_detected and not run_tracking_loop:
             run_tracking_loop = True
