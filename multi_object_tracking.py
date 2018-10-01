@@ -28,6 +28,8 @@ from threading import Thread
 import detection_visualization_util
 from random import randint
 import concurrent.futures
+from pyimagesearch.centroidtracker import CentroidTracker
+from pyimagesearch.trackableobject import TrackableObject
 
 # Use a service account
 cred = credentials.Certificate(os.environ['FIREBASE_CREDENTIALS'])
@@ -70,8 +72,16 @@ OPENCV_OBJECT_TRACKERS = {
 # initialize OpenCV's special multi-object tracker
 trackers = cv2.MultiTracker_create()
 
+'''
+Good ratio for live camera
+detection_frame_width = 800,tracking_frame_width = 500,delta_thresh = 4,min_area = 20
+'''
+
 detection_frame_width = 800
-tracking_frame_width = 400
+tracking_frame_width = 500
+delta_thresh = int(tracking_frame_width/125)
+min_area = int(tracking_frame_width/25)
+
 
 s3_res = boto3.resource('s3')
 s3_bucket = s3_res.Bucket('grassland-images')
@@ -256,6 +266,13 @@ def tracking_loop():
         tracking_loop_fps = FPS().start()
         
         frame_loop_count = 0
+        avg = None
+
+        track_centroids = True
+
+        ct = CentroidTracker(maxDisappeared=40, maxDistance=50)
+        trackableObjects = {}
+        
         
         #while run_tracking_loop:
         while True:
@@ -329,12 +346,12 @@ def tracking_loop():
                 if frame_dict.get("detected") == 1:
 
                     # (re-)initialize OpenCV's special multi-object tracker
-                    try:
-                        trackers.clear()
-                    except:
-                        pass
+                    # try:
+                    #     trackers.clear()
+                    # except:
+                    #     pass
                     
-                    trackers = cv2.MultiTracker_create() # Or we end up with multiple boxes on same object
+                    #trackers = cv2.MultiTracker_create() # Or we end up with multiple boxes on same object
 
                     output_dict = frame_dict.get("output_dict")
                     
@@ -379,48 +396,158 @@ def tracking_loop():
                     # if ok:
                     #     print("New tracking box initialized")
 
-                    for bbox in tracker_boxes:
-                        tracker = OPENCV_OBJECT_TRACKERS[args["tracker"]]()
-                        trackers.add(tracker, this_frame, bbox)
+                    # for bbox in tracker_boxes:
+                    #     tracker = OPENCV_OBJECT_TRACKERS[args["tracker"]]()
+                    #     trackers.add(tracker, this_frame, bbox)
                     
 
                     # -> if frame_dict.get("detected") == 1:
                     
                 else:
 
-                    
-
                     if frame_number % (framerate - 14) == 0:
                         # grab the updated bounding box coordinates (if any) for each
                         # object that is being tracked
 
                         #ok, bbox = tracker.update(this_frame)
-                        ok, tracker_boxes = trackers.update(this_frame)
+                        #ok, tracker_boxes = trackers.update(this_frame)
 
 
-                        if not ok:
-                            # Tracking failure
-                            #print("----- OBJECT TRACKER NOT UPDATING !! -----")
-                            if display:
-                                cv2.putText(this_frame, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
-                        else:
-                            # Tracking success
-                            if manual:
-                                tracker_boxes = []
-                                tracker_boxes.append(bbox)
-                        
+                        # if not ok:
+                        #     # Tracking failure
+                        #     #print("----- OBJECT TRACKER NOT UPDATING !! -----")
+                        #     if display:
+                        #         cv2.putText(this_frame, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
+                        # else:
+                        #     # Tracking success
+                        #     if manual:
+                        #         tracker_boxes = []
+                        #         tracker_boxes.append(bbox)
+                        pass
                     
                     # -> if frame_dict.get("detected") == 1: else:
-                    
-                if display:
-                    # Draw tracker boxes on frame
-                    for idx, bbox in enumerate(tracker_boxes):
-                        #(xmin, xmax, ymin, ymax) = [int(v) for v in box]
-                        #cv2.rectangle(this_frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1)
 
-                        p1 = (int(bbox[0]), int(bbox[1]))
-                        p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-                        cv2.rectangle(this_frame, p1, p2, colors[idx], 2)
+                    
+                gray = cv2.cvtColor(this_frame, cv2.COLOR_BGR2GRAY)
+                gray = cv2.GaussianBlur(gray, (21, 21), 0)
+
+                # if the average frame is None, initialize it
+                if avg is None:
+                    print("[INFO] starting background model...")
+                    avg = gray.copy().astype("float")
+                    #rawCapture.truncate(0)
+                    #continue
+                    cnts = []
+
+                else:
+                    # accumulate the weighted average between the current frame and
+                    # previous frames, then compute the difference between the current
+                    # frame and running average
+                    cv2.accumulateWeighted(gray, avg, 0.5)
+                    frameDelta = cv2.absdiff(gray, cv2.convertScaleAbs(avg))
+
+                    kernel = np.ones((5,5),np.uint8)
+                    # threshold the delta image, dilate the thresholded image to fill
+                    # in holes, then find contours on thresholded image
+                    thresh = cv2.threshold(frameDelta, delta_thresh, 255,
+                            cv2.THRESH_BINARY)[1]
+                    #thresh = cv2.dilate(thresh, None, iterations=2)
+                    thresh = cv2.dilate(thresh, kernel, iterations=2)
+                    cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,
+                            cv2.CHAIN_APPROX_SIMPLE)
+                    cnts = cnts[0] if imutils.is_cv2() else cnts[1]
+
+    
+
+                if track_centroids:
+                    rects = []
+
+                # loop over the contours
+                for c in cnts:
+                    # if the contour is too small, ignore it
+                    if cv2.contourArea(c) < min_area:
+                        continue
+
+                    if display:
+                        # compute the bounding box for the contour, draw it on the frame,
+                        # and update the text
+                        (x, y, w, h) = cv2.boundingRect(c)
+                        cv2.rectangle(this_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+
+                    startX = x
+                    startY = y
+                    endX = x + w
+                    endY = y + h
+
+                    if track_centroids:
+                        # add the bounding box coordinates to the rectangles list
+                        rects.append((startX, startY, endX, endY))
+
+
+                if track_centroids:
+                    # use the centroid tracker to associate the (1) old object
+                    # centroids with (2) the newly computed object centroids
+                    objects = ct.update(rects)
+
+                    # loop over the tracked objects
+                    for (objectID, centroid) in objects.items():
+                        # check to see if a trackable object exists for the current
+                        # object ID
+                        to = trackableObjects.get(objectID, None)
+
+                        # if there is no existing trackable object, create one
+                        if to is None:
+                            to = TrackableObject(objectID, centroid)
+
+                        # otherwise, there is a trackable object so we can utilize it
+                        # to determine direction
+                        else:
+                            # the difference between the y-coordinate of the *current*
+                            # centroid and the mean of *previous* centroids will tell
+                            # us in which direction the object is moving (negative for
+                            # 'up' and positive for 'down')
+                            y = [c[1] for c in to.centroids]
+                            direction = centroid[1] - np.mean(y)
+                            to.centroids.append(centroid)
+
+                            # # check to see if the object has been counted or not
+                            # if not to.counted:
+                            #     # if the direction is negative (indicating the object
+                            #     # is moving up) AND the centroid is above the center
+                            #     # line, count the object
+                            #     if direction < 0 and centroid[1] < H // 2:
+                            #         totalUp += 1
+                            #         to.counted = True
+
+                            #     # if the direction is positive (indicating the object
+                            #     # is moving down) AND the centroid is below the
+                            #     # center line, count the object
+                            #     elif direction > 0 and centroid[1] > H // 2:
+                            #         totalDown += 1
+                            #         to.counted = True
+
+                        # store the trackable object in our dictionary
+                        trackableObjects[objectID] = to
+
+                        if display:
+                            # draw both the ID of the object and the centroid of the
+                            # object on the output frame
+                            text = "ID {}".format(objectID)
+                            cv2.putText(this_frame, text, (centroid[0] - 10, centroid[1] - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                            cv2.circle(this_frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
+
+
+                if display:
+                    # # Draw tracker boxes on frame
+                    # for idx, bbox in enumerate(tracker_boxes):
+                    #     #(xmin, xmax, ymin, ymax) = [int(v) for v in box]
+                    #     #cv2.rectangle(this_frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1)
+
+                    #     p1 = (int(bbox[0]), int(bbox[1]))
+                    #     p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
+                    #     cv2.rectangle(this_frame, p1, p2, colors[idx], 2)
 
                     
                     # show the output frame
@@ -546,7 +673,7 @@ try:
 
             #frame_number += 1
 
-            large_frame = imutils.resize(frame, width=tracking_frame_width)
+            large_frame = imutils.resize(frame, width=detection_frame_width)
             frame = imutils.resize(frame, width=tracking_frame_width)
 
 
@@ -566,7 +693,7 @@ try:
             #if main_fps._numFrames == 0 or main_fps._numFrames % main_fps_divisor == 0:
 
 
-            if main_fps._numFrames == 0 or (datetime.now() - last_i_queue_put).total_seconds() > 4:
+            if main_fps._numFrames == 0 or (datetime.now() - last_i_queue_put).total_seconds() > 3:
                 
              
                 # Put frame in i_queue to wait for asynchronous object detection
@@ -686,4 +813,3 @@ finally:
     print("[INFO] elasped time: {:.2f}".format(main_fps.elapsed()))
     print("[INFO] approx. Main FPS: {:.2f}".format(main_fps.fps()))
     #print("[INFO] approx. Tracking_Loop FPS: {:.2f}".format(tracking_loop_fps.fps()))
-
