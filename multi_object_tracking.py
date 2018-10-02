@@ -97,6 +97,7 @@ p_queue = PriorityQueue(maxsize=p_queue_max) # priority queue
 framerate_queue = Queue(maxsize=5)
 
 dynamic_framerate = False
+use_usb_camera = False
 
 def delete_from_s3(s3_bucket, file_name_ext):
     try:
@@ -215,6 +216,8 @@ if not args.get("video", False):
     
     if args["picamera"] == 1 or args["picamera"] == True:
         vs.camera.rotation = args["rotation"]
+    else:
+        use_usb_camera = True
     
     # otherwise, grab a reference to the video file
 else:
@@ -284,6 +287,7 @@ def tracking_loop():
                 print("[INFO] approx. Tracking_Loop Running FPS: {:.2f}".format(current_tracking_loop_fps))
 
 
+                
                 # Send new framerate to camera
                 if dynamic_framerate and not framerate_queue.full():
                     framerate_queue.put(current_tracking_loop_fps)
@@ -355,7 +359,6 @@ def tracking_loop():
 
                     output_dict = frame_dict.get("output_dict")
                     
-                    print("DETECTIONS RECEIVED")
                     tracker_boxes = detection_visualization_util.get_bounding_boxes_for_image_array(
                         this_frame,
                         output_dict['detection_boxes'],
@@ -468,10 +471,11 @@ def tracking_loop():
                     if cv2.contourArea(c) < min_area:
                         continue
 
+                    (x, y, w, h) = cv2.boundingRect(c)
+                    
                     if display:
                         # compute the bounding box for the contour, draw it on the frame,
                         # and update the text
-                        (x, y, w, h) = cv2.boundingRect(c)
                         cv2.rectangle(this_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
 
@@ -650,6 +654,7 @@ dl.start()
 run_feed_loop = True
 try:
     main_fps = FPS().start()
+    new_framerate = framerate
     while run_feed_loop:
         
         # grab the current frame, then handle if we are using a
@@ -710,7 +715,8 @@ try:
                     try:
                         if int((datetime.now() - i_queue_notice_since).total_seconds()) > 40:
                             i_queue_notice_since = datetime.now()
-                            print("Cannot put frame in i_queue. o_queue 90% full")
+                            print("o_queue 90% full ...")
+                            print("...Can't add new frame to i_queue")
                     except:
                         i_queue_notice_since = datetime.now()
 
@@ -737,8 +743,8 @@ try:
                     try:
                         if int((datetime.now() - printout_since).total_seconds()) > 30:
                             printout_since = datetime.now()
-                            print("o_queue 90% full")
-                            print("Can't add new frames to o_queue")
+                            print("o_queue 90% full...")
+                            print("...Can't add new frames to o_queue")
                     except:
                         printout_since = datetime.now()
 
@@ -747,13 +753,19 @@ try:
 
             # -> if frame is not None and not np.array_equal(last_frame, frame):
 
-        if dynamic_framerate and not framerate_queue.empty():
-            new_framerate = framerate_queue.get()
+        if dynamic_framerate:
 
-            if args["picamera"] == 1 or args["picamera"] == True:
-                vs.camera.framerate = new_framerate
-                print("New camera framerate is", new_framerate)
-            else:
+            if not framerate_queue.empty():
+                new_framerate = framerate_queue.get()
+
+                if args["picamera"] == 1 or args["picamera"] == True:
+                    vs.camera.framerate = new_framerate
+                    print("New camera framerate is", new_framerate)
+
+
+            if use_usb_camera:
+                # Needs to be continually adjusted (not just once after new framerate added to framerate_queue) until current_main_fps does not exceed new_framerate. 
+                    
                 current_main_fps = main_fps._numFrames / (datetime.now() - main_fps._start).total_seconds()
                 if current_main_fps > new_framerate:  # this loop is reading frames faster than tracking loop can process
                     # Calculate how many frames ahead this loop is and delay it so the tracking loop can catch up
