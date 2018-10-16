@@ -549,8 +549,9 @@ def tracking_loop():
                             # print('DELETE '+str(object_id)+' OBJECT')
                             del trackableObjects[object_id]
 
+
                             
-                    # -> if track_centroids
+                        # -> if track_centroids
                     
 
                     #tracker = OPENCV_OBJECT_TRACKERS[args["tracker"]]()
@@ -655,8 +656,29 @@ def tracking_loop():
                     # centroids with (2) the newly computed object centroids
                     objects = ct.update(rects)
 
-                    # loop over the tracked objects
+                    # loop over the tracked objects to add them to objectsPositions and to trackableObjects
+                    objectsPositions = {}
                     for (objectID, (centroid, boxoid)) in objects.items():
+
+                        # Calculate bottom center pixel coordinates
+                        #bottom_center_x = (boxoid[0] + boxoid[2]) / 2
+                        bottom_center_x = centroid[0]
+                        bottom_center_y = boxoid[3]
+
+
+                        objectsPositions[objectID] = {
+                            "tracklet_id": objectID,
+                            "node_id": node_id,
+                            "bbox_rw_coord": {
+                                "btm_left": rw.coord(boxoid[0], boxoid[3]),
+                                "btm_right": rw.coord(boxoid[2], boxoid[3]),
+                                "btm_center": rw.coord(bottom_center_x, bottom_center_y)
+                            },
+                            "frame_timestamp": boxoid[4],
+                            "detection_class_id": boxoid[5]
+                        }
+
+                            
                         # check to see if a trackable object exists for the current
                         # object ID
                         to = trackableObjects.get(objectID, None)
@@ -705,6 +727,15 @@ def tracking_loop():
                             cv2.circle(this_frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
 
 
+                            
+                    ## Put tracklet tip data in queue via a separate process/thread
+                    ## To update their position in database
+                    tracklets_queue.put({ "tracklets_create": objectsPositions })                                
+
+                    
+                    # -> if track_centroids
+
+                    
                 if display:
                     # Draw tracker boxes on frame
                     for idx, bbox in enumerate(tracker_boxes):
