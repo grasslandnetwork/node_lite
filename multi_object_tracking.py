@@ -647,8 +647,8 @@ def tracking_loop():
 
                     if track_centroids:
                         # add the bounding box coordinates to the rectangles list
-                        # put -1 in detection_class_id section since we don't have a detection yet
-                        rects.append((startX, startY, endX, endY, frame_timestamp, -1))
+                        # put 0 in detection_class_id section since we don't have a detection yet
+                        rects.append((startX, startY, endX, endY, frame_timestamp, 0))
 
 
                 if track_centroids:

@@ -153,9 +153,14 @@ class CentroidTracker:
 
 
                     # if the input was detection boxes, then
-                    # deregister everything not acknowledged by detection boxes
+                    # mark for database deletion, those tracklets not acknowledged by detection boxes
                     if detectionsInput:
-                        self.deregister(objectID)
+                        
+                        (centroid, boxoid) = self.objects[objectID]
+                        (startX, startY, endX, endY, frame_timestamp, detection_class_id) = boxoid
+                        boxoid = (startX, startY, endX, endY, frame_timestamp, -1) # Set detection_class_id to -1 to delete tracklet on Grassland
+                        self.objects[objectID] = (centroid, boxoid)
+                        
                     else:
                         # check to see if the number of consecutive
                         # frames the object has been marked "disappeared"
