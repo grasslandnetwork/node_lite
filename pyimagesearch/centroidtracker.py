@@ -153,7 +153,7 @@ class CentroidTracker:
 
 
                     # if the input was detection boxes, then
-                    # mark for database deletion, those tracklets not acknowledged by detection boxes
+                    # mark for database deletion, those tracklets not acknowledged by detection boxes (objectless tracklets)
                     if detectionsInput:
                         
                         (centroid, boxoid) = self.objects[objectID]
