@@ -31,12 +31,13 @@ import concurrent.futures
 from pyimagesearch.centroidtracker import CentroidTracker
 from pyimagesearch.trackableobject import TrackableObject
 
+node_id = os.environ['NODE_ID']
+
 # Use a service account
 cred = credentials.Certificate(os.environ['FIREBASE_CREDENTIALS'])
 firebase_admin.initialize_app(cred)
 
 gl_db = firestore.client()
-gl_routes = gl_db.collection(u'routes')
 gl_nodes = gl_db.collection(u'nodes')
 
 # construct the argument parser and parse the arguments
@@ -75,7 +76,8 @@ Good ratio for live camera
 detection_frame_width = 800,tracking_frame_width = 500,delta_thresh = 4,min_area = 20
 '''
 
-detection_frame_width = 800
+frame_ratio = 1080/1920
+detection_frame_width = 1280
 tracking_frame_width = 500
 delta_thresh = int(tracking_frame_width/125)
 min_area = int(tracking_frame_width/25)
@@ -86,9 +88,11 @@ s3_bucket = s3_res.Bucket('grassland-images')
 
 lambda_url = os.environ['LAMBDA_DETECTION_URL']
 
+tracklets_queue_max = 100
 o_queue_max = 80
 p_queue_max = 300
 
+tracklets_queue = Queue() # tracklets queue    
 i_queue = Queue() # input queue    
 o_queue = Queue(maxsize=o_queue_max) # output queue
 p_queue = PriorityQueue(maxsize=p_queue_max) # priority queue
@@ -115,7 +119,7 @@ def get_detections_error_callback(the_exception):
     print("get_detections_error_callback called")
     print(the_exception)
 
-def get_detections(frame_number, frame, no_callback=False):    
+def get_detections(frame_number, frame, frame_timestamp, no_callback=False):    
     try:
         image = Image.fromarray(frame) # Remember Opencv images are in 'BGR'
         file_name_ext = 'frame_'+str(frame_number)+'.jpg'
@@ -148,7 +152,7 @@ def get_detections(frame_number, frame, no_callback=False):
         output_dict['detection_classes'] = detection_classes
 
 
-        detected_frame_tuple = ( frame_number, {"detected": 1, "frame": frame, "output_dict": output_dict} )
+        detected_frame_tuple = ( frame_number, {"detected": 1, "frame": frame, "frame_timestamp": frame_timestamp, "output_dict": output_dict} )
         if no_callback:
             add_to_o_queue(detected_frame_tuple)
             delete_from_s3(s3_bucket, file_name_ext)
@@ -199,10 +203,11 @@ def add_to_o_queue(detected_frame_tuple):
 
 # if a video path was not supplied, grab the reference to the web cam
 if not args.get("video", False):
-    framerate = 15
+    framerate = 30
         
     print("[INFO] starting video stream...")    
-    vs = VideoStream(usePiCamera=args["picamera"], resolution=(800, 464), framerate=framerate).start() # Default to PiCamera
+    #vs = VideoStream(usePiCamera=args["picamera"], resolution=(800, 464), framerate=framerate).start() # Default to PiCamera
+    vs = VideoStream(usePiCamera=args["picamera"], resolution=(1280, int(detection_frame_width*frame_ratio)), framerate=framerate).start() # Default to PiCamera
     print("[INFO] Warming up camera...")
     time.sleep(3)
     
@@ -251,6 +256,61 @@ requests.get(lambda_url)
 print("Waiting "+str(lambda_wakeup_duration)+" seconds for function to wake up...")
 time.sleep(lambda_wakeup_duration)
 
+post_tracklet_url = os.environ['GRASSLAND_DB_ENDPOINT']
+def post_tracklet(tracklet_dict):
+    post_tracklet_start_time = time.time()
+
+    print("Making request on lambda")
+    response = requests.post(post_tracklet_url, json=tracklet_dict)
+
+    end_time = time.time()
+
+    print("TRACKLET ROUND TRIP TIME:", end_time-post_tracklet_start_time)
+
+        
+def tracklets_loop():
+    try:
+        print("STARTING TRACKLETS_LOOP")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            while True:
+
+                try:
+                    if not tracklets_queue.empty():
+
+                        tracklet_dict = tracklets_queue.get(block=False)
+
+                        before_executor = time.time()
+                        executor.submit(post_tracklet, tracklet_dict)
+                        print("Tracklet Executor Time:", time.time()-before_executor)
+
+                    else:
+                        try:
+                            if int((datetime.now() - idle_since).total_seconds()) > 40:
+                                idle_since = datetime.now()
+                                print("no tracklets_queue items for tracklets loop .................")
+                        except:
+                            idle_since = datetime.now()
+
+
+
+                except Empty:
+                    print("tracklets_queue empty error")                        
+                except KeyboardInterrupt:
+                    import traceback
+                    traceback.print_exc()
+                    raise                
+                except:
+                    import traceback
+                    traceback.print_exc()
+
+    except KeyboardInterrupt:
+        import traceback
+        traceback.print_exc()
+        raise                
+    except:
+        import traceback
+        traceback.print_exc()
+
 
 def tracking_loop():
     try:
@@ -263,7 +323,7 @@ def tracking_loop():
         tracker_boxes = []
         track_centroids = True
 
-        ct = CentroidTracker(maxDisappeared=40, maxDistance=50)
+        ct = CentroidTracker(maxDisappeared=10, maxDistance=tracking_frame_width/20)
         trackableObjects = {}
         
         
@@ -332,6 +392,7 @@ def tracking_loop():
             else:
                 frame_loop_count += 1
                 this_frame = frame_dict["frame"]
+                frame_timestamp = frame_dict["frame_timestamp"]
                 if frame_dict.get("detected") == 1:
 
                     # (re-)initialize OpenCV's special multi-object tracker
@@ -357,6 +418,24 @@ def tracking_loop():
                     )
 
 
+                    #print(tracker_boxes)
+                    # Remove items from tracker_boxes that aren't
+                    # a person, bicycle, car, motorcycle, bus or truck
+                    tracker_boxes_to_delete = []
+                    for idx in range(len(tracker_boxes)):
+                        if tracker_boxes[idx][4] not in [1, 2, 3, 4, 6, 8]:
+                            tracker_boxes_to_delete.append(idx)
+
+
+                    for tracker_box_idx in tracker_boxes_to_delete:
+                            try:
+                                del tracker_boxes[tracker_box_idx]
+                            except:
+                                print(tracker_boxes)
+                                print(idx)
+
+                            
+
                     manual = False
                     if display:
                         colors = [] # For display when testing consistent track association
@@ -367,15 +446,112 @@ def tracking_loop():
                         tracker_boxes = []
                         tracker_boxes.append(bbox)
                     else:
+                        if track_centroids:
+                            rects = []
+                        
                         for idx, bbox in enumerate(tracker_boxes):
                             
-                            xmin, ymin, xmax, ymax = bbox
-                        
+                            xmin, ymin, xmax, ymax, detection_class_id = bbox
+
                             tracker_boxes[idx] = (xmin, ymin, xmax-xmin, ymax-ymin)
 
+                            
+                            if track_centroids:
+                                rects.append((xmin, ymin, xmax, ymax, frame_timestamp, detection_class_id))
+                        
                             if display:
                                 colors.append((randint(0, 255), randint(0, 255), randint(0, 255)))
 
+
+                    '''
+                    Use object detection to identify the objects that
+                    we've been tracking though just motion detection,
+                    contours and centroids. 
+                    Record those tracklets that belong to objects we want
+                    '''
+                    if track_centroids:
+
+                        # use the centroid tracker to associate the (1) old object
+                        # centroids with (2) the object detections
+                        objects = ct.update(rects, True)
+
+                        # loop over the tracked objects to add them to objectsPositions and to trackableObjects
+                        objectsPositions = {}
+                        for (objectID, (centroid, boxoid)) in objects.items():
+
+                            # Calculate bottom center pixel coordinates
+                            #bottom_center_x = (boxoid[0] + boxoid[2]) / 2
+                            bottom_center_x = centroid[0]
+                            bottom_center_y = boxoid[3]
+
+
+                            objectsPositions[objectID] = {
+                                "tracklet_id": objectID,
+                                "node_id": node_id,
+                                "bbox_rw_coord": {
+                                    "btm_left": rw.coord(boxoid[0], boxoid[3]),
+                                    "btm_right": rw.coord(boxoid[2], boxoid[3]),
+                                    "btm_center": rw.coord(bottom_center_x, bottom_center_y)
+                                },
+                                "frame_timestamp": boxoid[4],
+                                "detection_class_id": boxoid[5]
+                            }
+
+                                
+                            # check to see if a trackable object exists for the current
+                            # object ID
+                            to = trackableObjects.get(objectID, None)
+
+                            # if there is no existing trackable object, create one
+                            if to is None:
+                                to = TrackableObject(objectID, centroid, boxoid)
+
+                            # otherwise, there is a trackable object so we can utilize it
+                            # to determine direction
+                            else:
+                                # the difference between the y-coordinate of the *current*
+                                # centroid and the mean of *previous* centroids will tell
+                                # us in which direction the object is moving (negative for
+                                # 'up' and positive for 'down')
+                                y = [c[1] for c in to.centroids]
+                                direction = centroid[1] - np.mean(y)
+                                to.centroids.append(centroid)
+                                to.boxoids.append(boxoid)
+
+
+                            # store the trackable object in our dictionary
+                            trackableObjects[objectID] = to
+
+
+                            
+                        ## Put tracklet tip data in queue via a separate process/thread
+                        ## To update their position in database
+                        tracklets_queue.put({ "tracklets_create": objectsPositions })                                
+
+                        
+
+                        # For all the objects in trackableObjects
+
+                        # After updating, if object has been marked as "disappeared"
+                        # then add it to disappeared_objects list
+                        disappeared_objects = []
+                        for object_id, trackableObject in trackableObjects.items():
+                                
+                            # If the object has disappeared, remove it from trackableObjects
+                            if not ct.objects.get(object_id, False): 
+                                disappeared_objects.append(object_id)
+
+
+
+                        
+                        # Remove "disappeared" objects from trackableObjects
+                        for object_id in disappeared_objects:
+                            # print('DELETE '+str(object_id)+' OBJECT')
+                            del trackableObjects[object_id]
+
+                            
+                    # -> if track_centroids
+                    
 
                     #tracker = OPENCV_OBJECT_TRACKERS[args["tracker"]]()
                     #ok = tracker.init(this_frame, bbox)
@@ -470,7 +646,8 @@ def tracking_loop():
 
                     if track_centroids:
                         # add the bounding box coordinates to the rectangles list
-                        rects.append((startX, startY, endX, endY))
+                        # put -1 in detection_class_id section since we don't have a detection yet
+                        rects.append((startX, startY, endX, endY, frame_timestamp, -1))
 
 
                 if track_centroids:
@@ -479,14 +656,14 @@ def tracking_loop():
                     objects = ct.update(rects)
 
                     # loop over the tracked objects
-                    for (objectID, centroid) in objects.items():
+                    for (objectID, (centroid, boxoid)) in objects.items():
                         # check to see if a trackable object exists for the current
                         # object ID
                         to = trackableObjects.get(objectID, None)
 
                         # if there is no existing trackable object, create one
                         if to is None:
-                            to = TrackableObject(objectID, centroid)
+                            to = TrackableObject(objectID, centroid, boxoid)
 
                         # otherwise, there is a trackable object so we can utilize it
                         # to determine direction
@@ -498,6 +675,7 @@ def tracking_loop():
                             y = [c[1] for c in to.centroids]
                             direction = centroid[1] - np.mean(y)
                             to.centroids.append(centroid)
+                            to.boxoids.append(boxoid)
 
                             # # check to see if the object has been counted or not
                             # if not to.counted:
@@ -521,7 +699,7 @@ def tracking_loop():
                         if display:
                             # draw both the ID of the object and the centroid of the
                             # object on the output frame
-                            text = "ID {}".format(objectID)
+                            text = "ID {}".format(objectID[0:3])
                             cv2.putText(this_frame, text, (centroid[0] - 10, centroid[1] - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                             cv2.circle(this_frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
@@ -588,11 +766,11 @@ def detection_loop():
             try:
                 if not i_queue.empty():
 
-                    frame_number, frame = i_queue.get(block=False)
+                    frame_number, frame, frame_timestamp = i_queue.get(block=False)
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                         #if not o_queue.full(): # If o_queue is full the tracker isn't moving fast enough and to avoid memory problems, we'll just drop frames
                         #before_executor = time.time()
-                        executor.submit(get_detections, frame_number, frame, no_callback=True)
+                        executor.submit(get_detections, frame_number, frame, frame_timestamp, no_callback=True)
                         #print("Executor Time:", time.time()-before_executor)
 
                 else:
@@ -632,6 +810,11 @@ def o_queue_exceeds_safe_threshold():
 dl = multiprocessing.Process(target=detection_loop)
 dl.daemon = True
 dl.start()
+
+tsl = multiprocessing.Process(target=tracklets_loop)
+tsl.daemon = True
+tsl.start()
+
 #pool = Pool(1, detection_loop)
 #pool.apply_async(func=detection_loop, args=())
 
@@ -640,6 +823,8 @@ try:
     main_fps = FPS().start()
     new_framerate = framerate
     while run_feed_loop:
+        
+        feed_loop_start_time = time.time()
         
         # grab the current frame, then handle if we are using a
         # VideoStream or VideoCapture object
@@ -651,6 +836,8 @@ try:
         else:
             frame = vs.read()
 
+        # Set frame_timestamp in milliseconds    
+        frame_timestamp = round( datetime.timestamp(datetime.now(timezone.utc)) * 1000 )
 
         # check to see if we have reached the end of the stream
         if frame is None:
@@ -689,7 +876,7 @@ try:
                 # Put frame in i_queue to wait for asynchronous object detection
                 if not o_queue_exceeds_safe_threshold(): # Since all extant i_queue frames eventually go into o_queue and if o_queue exceeds maxsize, program will stop
                     #print("Putting frame in i_queue")
-                    i_queue.put((main_fps._numFrames, large_frame))
+                    i_queue.put((main_fps._numFrames, large_frame, frame_timestamp))
                     
                     if main_fps._numFrames == 0:
                         first_frame_detected = True
@@ -720,7 +907,7 @@ try:
             else:
                 if not o_queue_exceeds_safe_threshold(): # Skipping when it's 90% full. The remaining 10% is given to detected frames
                     # store frame in output queue
-                    o_queue.put((main_fps._numFrames, {"detected": 0, "frame": frame}))
+                    o_queue.put((main_fps._numFrames, {"detected": 0, "frame": frame, "frame_timestamp": frame_timestamp}))
                     main_fps.update()
                 else:
 
@@ -751,8 +938,13 @@ try:
 
 
 
-
+            
         count += 1
+
+
+        feed_loop_end_time = time.time()
+        #print("FEED LOOP TIME:", feed_loop_end_time-feed_loop_start_time)
+
 
 
 
@@ -769,6 +961,9 @@ finally:
     dl.terminate()
     print("TERMINATING tracking_loop")
     tl.terminate()
+    print("TERMINATING tracklets_loop")
+    tsl.terminate()
+
     
     #print("CLOSING POOL")
     #pool.close()

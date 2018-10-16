@@ -537,13 +537,13 @@ def get_bounding_boxes_for_image_array(
                         display_str = '{}: {}%'.format(display_str, int(100*scores[i]))
                 box_to_display_str_map[box].append(display_str)
                 if agnostic_mode:
-                    box_to_color_map[box] = 'DarkOrange'
+                    box_to_color_map[box] = ('DarkOrange', classes[i])
                 else:
-                    box_to_color_map[box] = STANDARD_COLORS[classes[i] % len(STANDARD_COLORS)]
+                    box_to_color_map[box] = (STANDARD_COLORS[classes[i] % len(STANDARD_COLORS)], classes[i])
 
     bounding_boxes = []
     # Draw all boxes onto image.
-    for box, color in box_to_color_map.items():
+    for box, (color, detection_class_id) in box_to_color_map.items():
         ymin, xmin, ymax, xmax = box
         left, top, right, bottom = get_bounding_box_for_image_array(
             image,
@@ -557,7 +557,7 @@ def get_bounding_boxes_for_image_array(
             use_normalized_coordinates=use_normalized_coordinates
         )
 
-        bounding_boxes.append((left, top, right, bottom))
+        bounding_boxes.append((left, top, right, bottom, detection_class_id))
 
     return bounding_boxes
 
