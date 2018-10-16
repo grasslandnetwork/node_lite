@@ -421,18 +421,18 @@ def tracking_loop():
                     #print(tracker_boxes)
                     # Remove items from tracker_boxes that aren't
                     # a person, bicycle, car, motorcycle, bus or truck
-                    tracker_boxes_to_delete = []
-                    for idx in range(len(tracker_boxes)):
-                        if tracker_boxes[idx][4] not in [1, 2, 3, 4, 6, 8]:
-                            tracker_boxes_to_delete.append(idx)
+                    # tracker_boxes_to_delete = []
+                    # for idx in range(len(tracker_boxes)):
+                    #     if tracker_boxes[idx][4] not in [1, 2, 3, 4, 6, 8]:
+                    #         tracker_boxes_to_delete.append(idx)
 
 
-                    for tracker_box_idx in tracker_boxes_to_delete:
-                            try:
-                                del tracker_boxes[tracker_box_idx]
-                            except:
-                                print(tracker_boxes)
-                                print(idx)
+                    # for tracker_box_idx in tracker_boxes_to_delete:
+                    #         try:
+                    #             del tracker_boxes[tracker_box_idx]
+                    #         except:
+                    #             print(tracker_boxes)
+                    #             print(idx)
 
                             
 
@@ -476,7 +476,7 @@ def tracking_loop():
                         objects = ct.update(rects, True)
 
                         # loop over the tracked objects to add them to objectsPositions and to trackableObjects
-                        objectsPositions = {}
+                        objectsPositions = []
                         for (objectID, (centroid, boxoid)) in objects.items():
 
                             # Calculate bottom center pixel coordinates
@@ -485,7 +485,7 @@ def tracking_loop():
                             bottom_center_y = boxoid[3]
 
 
-                            objectsPositions[objectID] = {
+                            objectsPositions.append({
                                 "tracklet_id": objectID,
                                 "node_id": node_id,
                                 "bbox_rw_coord": {
@@ -495,7 +495,7 @@ def tracking_loop():
                                 },
                                 "frame_timestamp": boxoid[4],
                                 "detection_class_id": boxoid[5]
-                            }
+                            })
 
                                 
                             # check to see if a trackable object exists for the current
@@ -657,7 +657,7 @@ def tracking_loop():
                     objects = ct.update(rects)
 
                     # loop over the tracked objects to add them to objectsPositions and to trackableObjects
-                    objectsPositions = {}
+                    objectsPositions = []
                     for (objectID, (centroid, boxoid)) in objects.items():
 
                         # Calculate bottom center pixel coordinates
@@ -666,7 +666,7 @@ def tracking_loop():
                         bottom_center_y = boxoid[3]
 
 
-                        objectsPositions[objectID] = {
+                        objectsPositions.append({
                             "tracklet_id": objectID,
                             "node_id": node_id,
                             "bbox_rw_coord": {
@@ -676,7 +676,7 @@ def tracking_loop():
                             },
                             "frame_timestamp": boxoid[4],
                             "detection_class_id": boxoid[5]
-                        }
+                        })
 
                             
                         # check to see if a trackable object exists for the current
