@@ -99,11 +99,23 @@ class RealWorldCoordinates:
         print(self.rw_transform(np.array([[300.0, 200.0]])))
 
 
+    # Used for Firebase's Firestore
+    # def coord(self, x, y): 
+
+    #     coord = self.rw_transform(np.array([[x, y]]))
+
+          # Returns a list (array) because of Firebase's Firestore
+    #     return [coord[0][0], coord[0][1]]
+
+    
     def coord(self, x, y):
 
         coord = self.rw_transform(np.array([[x, y]]))
 
-        return [coord[0][0], coord[0][1]]
+        return {
+            "lng": coord[0][0],
+            "lat": coord[0][1]
+        }
 
 
            
