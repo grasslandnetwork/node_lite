@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
-
-
+import os
+import json
 
 # TL is the SE corner
 # 0, 0  = [-75.75021684378025, 45.393495598366655]
@@ -59,12 +59,29 @@ class RealWorldCoordinates:
             secondary = np.array([[-75.75021684378025, 45.393495598366655], [-75.7512298958311, 45.39309963711102], [-75.75150315621723, 45.393444401619234], [-75.75049010416637, 45.393840360459365]])
         else:
             secondary_array = []
+
+            # Firebase's Firestore
             corner_names = [u'ul', u'ur', u'll', u'lr']
             for corner_name in corner_names:
                 ul_lng = gl_nodes.document('0').get().to_dict()[u'homography_points'][u'corners'][corner_name][u'lng']
                 ul_lat = gl_nodes.document('0').get().to_dict()[u'homography_points'][u'corners'][corner_name][u'lat']
 
                 secondary_array.append([ul_lng, ul_lat])
+
+            
+            # MySQL
+            # corner_names = ['ul', 'ur', 'll', 'lr']
+            # node_id = os.environ['NODE_ID']
+            # ndata = { "node_id": node_id, "get_node_calibration": True }
+            # response = requests.post(url, json=ndata)
+            # db_response_dict = json.loads(response.text)
+            # calibration = db_response_dict['db_result']
+            # for corner_name in corner_names:
+            #     ul_lng = calibration['homography_points']['corners'][corner_name]['lng']
+            #     ul_lat = calibration['homography_points']['corners'][corner_name]['lat']
+            #     secondary_array.append([ul_lng, ul_lat])
+
+            
 
 
             secondary = np.array(secondary_array)
