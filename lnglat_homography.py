@@ -16,10 +16,12 @@ import json
 # 0, 662 = [-75.75049010416637, 45.393840360459365]
 
 
-
+class MyException(Exception):
+    pass
 
 class RealWorldCoordinates:
     def __init__(self):
+        self.calibration = {}
         # pts_src and pts_dst are numpy arrays of points
         # in source and destination images. We need at least 
         # 4 corresponding points. 
@@ -50,41 +52,39 @@ class RealWorldCoordinates:
 
 
 
-    def set_transform(self, dynamic=False, gl_nodes=None):
+    def set_transform(self):
 
         # Get the real world transform that gets the longitude and latitude coordinates of each pixel of the realigned image
         # From https://stackoverflow.com/a/20555267/8941739
         primary = np.array([[0.0, 0.0], [1366.0, 0.0], [1366.0, 662.0], [0.0, 662.0]])
-        if not dynamic:
-            secondary = np.array([[-75.75021684378025, 45.393495598366655], [-75.7512298958311, 45.39309963711102], [-75.75150315621723, 45.393444401619234], [-75.75049010416637, 45.393840360459365]])
-        else:
-            secondary_array = []
+        
+        # if not dynamic: # 
+        #     secondary = np.array([[-75.75021684378025, 45.393495598366655], [-75.7512298958311, 45.39309963711102], [-75.75150315621723, 45.393444401619234], [-75.75049010416637, 45.393840360459365]])
 
-            # Firebase's Firestore
-            corner_names = [u'ul', u'ur', u'll', u'lr']
-            for corner_name in corner_names:
-                ul_lng = gl_nodes.document('0').get().to_dict()[u'homography_points'][u'corners'][corner_name][u'lng']
-                ul_lat = gl_nodes.document('0').get().to_dict()[u'homography_points'][u'corners'][corner_name][u'lat']
+        secondary_array = []
 
-                secondary_array.append([ul_lng, ul_lat])
+        # Firebase's Firestore
+        # corner_names = [u'ul', u'ur', u'll', u'lr']
+        # for corner_name in corner_names:
+        #     ul_lng = gl_nodes.document('0').get().to_dict()[u'homography_points'][u'corners'][corner_name][u'lng']
+        #     ul_lat = gl_nodes.document('0').get().to_dict()[u'homography_points'][u'corners'][corner_name][u'lat']
+        #     secondary_array.append([ul_lng, ul_lat])
 
-            
-            # MySQL
-            # corner_names = ['ul', 'ur', 'll', 'lr']
-            # node_id = os.environ['NODE_ID']
-            # ndata = { "node_id": node_id, "get_node_calibration": True }
-            # response = requests.post(url, json=ndata)
-            # db_response_dict = json.loads(response.text)
-            # calibration = db_response_dict['db_result']
-            # for corner_name in corner_names:
-            #     ul_lng = calibration['homography_points']['corners'][corner_name]['lng']
-            #     ul_lat = calibration['homography_points']['corners'][corner_name]['lat']
-            #     secondary_array.append([ul_lng, ul_lat])
+        '''
+        Sample Calibration Format
+        {'lng_focus': -75.75107566872947, 'bearing': 62.60000000000002, 'tracking_frame': {'height': 281, 'width': 500}, 'lat_focus': 45.39331613895314, 'pitch': 55.00000000000001, 'homography_points': {'corners': {'ul': {'lat': 45.395059987864016, 'lng': -75.75055046479982}, 'll': {'lat': 45.392791493630654, 'lng': -75.75123398120483}, 'ur': {'lat': 45.392869098373296, 'lng': -75.74893325620522}, 'lr': {'lat': 45.39362547029299, 'lng': -75.75184957418519}}, 'markers': {}}}
 
-            
+        '''
+        # MySQL
+        corner_names = ['ul', 'ur', 'll', 'lr']
+        self.calibration_get()
+        for corner_name in corner_names:
+            ul_lng = self.calibration['homography_points']['corners'][corner_name]['lng']
+            ul_lat = self.calibration['homography_points']['corners'][corner_name]['lat']
+            secondary_array.append([ul_lng, ul_lat])
 
 
-            secondary = np.array(secondary_array)
+        secondary = np.array(secondary_array)
             
 
         # Pad the data with ones, so that our transformation can do translations too
@@ -124,7 +124,34 @@ class RealWorldCoordinates:
           # Returns a list (array) because of Firebase's Firestore
     #     return [coord[0][0], coord[0][1]]
 
-    
+
+        
+    def calibration_update(self):
+        node_id = os.environ['NODE_ID']
+        gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
+        data = { "node_id": node_id, "calibration": self.calibration }
+        response = requests.post(gl_api_endpoint+"calibration_update", json=data)
+
+        if response.status_code != 200:
+            print(response.text)
+            raise MyException("Grassland API Error Code: "+str(response.status_code))
+
+        
+    def calibration_get(self):
+        node_id = os.environ['NODE_ID']
+        gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
+        response = requests.get(gl_api_endpoint+"calibration_get"+"?node_id="+str(node_id))
+
+        if response.status_code == 200:
+            response_dict = json.loads(response.text)
+            db_result_dict = response_dict['db_results']
+            calibration = db_result_dict['calibration']
+            self.calibration = calibration
+        else:
+            print(response.text)
+            raise MyException("Grassland API Error Code: "+str(response.status_code))
+
+        
     def coord(self, x, y):
 
         coord = self.rw_transform(np.array([[x, y]]))
