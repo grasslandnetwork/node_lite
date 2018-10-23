@@ -207,7 +207,7 @@ if not args.get("video", False):
         
     print("[INFO] starting video stream...")    
     #vs = VideoStream(usePiCamera=args["picamera"], resolution=(800, 464), framerate=framerate).start() # Default to PiCamera
-    vs = VideoStream(usePiCamera=args["picamera"], resolution=(1280, int(detection_frame_width*frame_ratio)), framerate=framerate).start() # Default to PiCamera
+    vs = VideoStream(usePiCamera=args["picamera"], resolution=(detection_frame_width, int(detection_frame_width*frame_ratio)), framerate=framerate).start() # Default to PiCamera
     print("[INFO] Warming up camera...")
     time.sleep(3)
     
@@ -224,8 +224,12 @@ else:
 
 
     
+'''
+Here we calculate and set the linear map (transformation matrix) that we use to turn the pixel coordinates of the objects on the frame into their corresponding lat/lng coordinates in the real world. It's a computationally expensive calculation and requires inputs from the camera's calibration (frame of reference in the real world) so we do it once here instead of everytime we need to do a transformation from pixels to lat/lng
+'''
 rw = RealWorldCoordinates()
-rw.set_transform(dynamic=True, gl_nodes=gl_nodes)
+rw.set_transform() 
+
 
 
 first_frame_detected = False
@@ -888,8 +892,9 @@ try:
             if not frame_dimensions_set: # Important For Homography to real world coordinates (lat/long)
                 height, width, channels = frame.shape
                 # Tell Grassland what the frame dimensions are for camera calibration
-                gl_nodes.document('0').update({u'tracking_frame': {u'width': width, u'height': height}})
-
+                rw.calibration['tracking_frame'] = {'height': height, 'width': width}
+                rw.calibration_update()
+                
                 frame_dimensions_set = True
 
 
