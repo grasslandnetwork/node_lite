@@ -256,12 +256,12 @@ requests.get(lambda_url)
 print("Waiting "+str(lambda_wakeup_duration)+" seconds for function to wake up...")
 time.sleep(lambda_wakeup_duration)
 
-post_tracklet_url = os.environ['GRASSLAND_DB_ENDPOINT']
+gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
 def post_tracklet(tracklet_dict):
     post_tracklet_start_time = time.time()
 
     print("Making request on lambda")
-    response = requests.post(post_tracklet_url, json=tracklet_dict)
+    response = requests.post(gl_api_endpoint+"tracklets_create", json=tracklet_dict)
 
     end_time = time.time()
 
@@ -526,7 +526,7 @@ def tracking_loop():
                             
                         ## Put tracklet tip data in queue via a separate process/thread
                         ## To update their position in database
-                        tracklets_queue.put({ "tracklets_create": objectsPositions })                                
+                        tracklets_queue.put({ "tracklets": objectsPositions })                                
 
                         
 
@@ -730,7 +730,7 @@ def tracking_loop():
                             
                     ## Put tracklet tip data in queue via a separate process/thread
                     ## To update their position in database
-                    tracklets_queue.put({ "tracklets_create": objectsPositions })                                
+                    tracklets_queue.put({ "tracklets": objectsPositions })                                
 
                     
                     # -> if track_centroids
