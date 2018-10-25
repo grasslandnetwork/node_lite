@@ -892,8 +892,8 @@ try:
             if not frame_dimensions_set: # Important For Homography to real world coordinates (lat/long)
                 height, width, channels = frame.shape
                 # Tell Grassland what the frame dimensions are for camera calibration
-                rw.calibration['tracking_frame'] = {'height': height, 'width': width}
-                rw.calibration_update()
+                rw.tracking_frame = {"height": height, "width": width}
+                rw.node_update()
                 
                 frame_dimensions_set = True
 
