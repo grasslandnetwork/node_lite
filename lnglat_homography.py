@@ -21,6 +21,7 @@ class MyException(Exception):
 
 class RealWorldCoordinates:
     def __init__(self):
+        self.tracking_frame = {}
         self.calibration = {}
         # pts_src and pts_dst are numpy arrays of points
         # in source and destination images. We need at least 
@@ -71,13 +72,48 @@ class RealWorldCoordinates:
         #     secondary_array.append([ul_lng, ul_lat])
 
         '''
-        Sample Calibration Format
-        {'lng_focus': -75.75107566872947, 'bearing': 62.60000000000002, 'tracking_frame': {'height': 281, 'width': 500}, 'lat_focus': 45.39331613895314, 'pitch': 55.00000000000001, 'homography_points': {'corners': {'ul': {'lat': 45.395059987864016, 'lng': -75.75055046479982}, 'll': {'lat': 45.392791493630654, 'lng': -75.75123398120483}, 'ur': {'lat': 45.392869098373296, 'lng': -75.74893325620522}, 'lr': {'lat': 45.39362547029299, 'lng': -75.75184957418519}}, 'markers': {}}}
+        Sample Node Format
+        {
+            'id': 'n68b5a19ef9364a74ae73b069934b21a4',
+            'tracking_frame': {'height': 281, 'width': 500},
+            'calibration': {
+                'lng_focus': -75.75107566872947,
+                'bearing': 62.60000000000002,
+                'tracking_frame': {
+                    'height': 281,
+                    'width': 500
+                },
+                'lat_focus': 45.39331613895314,
+                'pitch': 55.00000000000001,
+                'homography_points': {
+                    'corners': {
+                        'ul': {
+                            'lat': 45.395059987864016,
+                            'lng': -75.75055046479982
+                        },
+                        'll': {
+                            'lat': 45.392791493630654,
+                            'lng': -75.75123398120483
+                        },
+                        'ur': {
+                            'lat': 45.392869098373296,
+                            'lng': -75.74893325620522
+                        },
+                        'lr': {
+                            'lat': 45.39362547029299,
+                            'lng': -75.75184957418519
+                        }
+                    },
+                    'markers': {}
+                }
+            }
+        }
+
 
         '''
         # MySQL
         corner_names = ['ul', 'ur', 'll', 'lr']
-        self.calibration_get()
+        self.node_get()
         for corner_name in corner_names:
             ul_lng = self.calibration['homography_points']['corners'][corner_name]['lng']
             ul_lat = self.calibration['homography_points']['corners'][corner_name]['lat']
@@ -126,21 +162,21 @@ class RealWorldCoordinates:
 
 
         
-    def calibration_update(self):
+    def node_update(self):
         node_id = os.environ['NODE_ID']
         gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
-        data = { "node_id": node_id, "calibration": self.calibration }
-        response = requests.post(gl_api_endpoint+"calibration_update", json=data)
+        data = { "id": node_id, "tracking_frame": self.tracking_frame, "calibration": self.calibration }
+        response = requests.post(gl_api_endpoint+"node_update", json=data)
 
         if response.status_code != 200:
             print(response.text)
             raise MyException("Grassland API Error Code: "+str(response.status_code))
 
         
-    def calibration_get(self):
+    def node_get(self):
         node_id = os.environ['NODE_ID']
         gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
-        response = requests.get(gl_api_endpoint+"calibration_get"+"?node_id="+str(node_id))
+        response = requests.get(gl_api_endpoint+"node_get"+"?id="+str(node_id))
 
         if response.status_code == 200:
             response_dict = json.loads(response.text)
