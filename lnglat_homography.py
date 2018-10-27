@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import os
 import json
+import requests
 
 # TL is the SE corner
 # 0, 0  = [-75.75021684378025, 45.393495598366655]
@@ -56,20 +57,30 @@ class RealWorldCoordinates:
     def set_transform(self):
 
         # Get the real world transform that gets the longitude and latitude coordinates of each pixel of the realigned image
-        # From https://stackoverflow.com/a/20555267/8941739
-        primary = np.array([[0.0, 0.0], [1366.0, 0.0], [1366.0, 662.0], [0.0, 662.0]])
+        # Using the node calibration web app, we can make a function that will allow the node to know what the real world (lat/lng) coordinates are for each pixels in it's frame
+        # The node calibration web app using Mapbox and Open Street Map can map its pixels coordinates (2D space 'F') to a latitude and longitude coordinate (2D space 'W').
+        # By lining up the Open Street Map "camera"" to exactly match the perspective of the real camera in the node, we can take a few pixels coordinates from 'F'
+        # and their coresponding real world coordinates 'W' from the web app and use that to find a function, a linear map (transformation matrix), 'L'
+        # that will take any pixel coordinate from the space 'F' and produce the cooresponding coordinate in 'W'. L(f) = w
+
+        # 
+        # Code taken From https://stackoverflow.com/a/20555267/8941739
+
+
+        #primary = np.array([[0.0, 0.0], [1366.0, 0.0], [1366.0, 662.0], [0.0, 662.0]]) # Average dimensions of monitor viewing webapp. Maybe I should change this to be dynamic
+        
+        height = float(self.tracking_frame['height'])
+        height = height / 2 # The modification made to mapbox (https://github.com/mapbox/mapbox-gl-js/issues/3731#issuecomment-368641789) that allows a greater than 60 degree pitch has a bug with unprojecting points closer to the horizon. They get very "screwy". So the two top homography_point corners in the web app ('ul' and 'ur') actually start half way down the canvas as the starting point to start from below the horizon
+                                            
+        width = float(self.tracking_frame['width'])
+        primary = np.array([[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]]) 
+        
         
         # if not dynamic: # 
         #     secondary = np.array([[-75.75021684378025, 45.393495598366655], [-75.7512298958311, 45.39309963711102], [-75.75150315621723, 45.393444401619234], [-75.75049010416637, 45.393840360459365]])
 
         secondary_array = []
 
-        # Firebase's Firestore
-        # corner_names = [u'ul', u'ur', u'll', u'lr']
-        # for corner_name in corner_names:
-        #     ul_lng = gl_nodes.document('0').get().to_dict()[u'homography_points'][u'corners'][corner_name][u'lng']
-        #     ul_lat = gl_nodes.document('0').get().to_dict()[u'homography_points'][u'corners'][corner_name][u'lat']
-        #     secondary_array.append([ul_lng, ul_lat])
 
         '''
         Sample Node Format
@@ -79,10 +90,6 @@ class RealWorldCoordinates:
             'calibration': {
                 'lng_focus': -75.75107566872947,
                 'bearing': 62.60000000000002,
-                'tracking_frame': {
-                    'height': 281,
-                    'width': 500
-                },
                 'lat_focus': 45.39331613895314,
                 'pitch': 55.00000000000001,
                 'homography_points': {
@@ -163,12 +170,14 @@ class RealWorldCoordinates:
 
         
     def node_update(self):
+        self.node_get()
         node_id = os.environ['NODE_ID']
         gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
         data = { "id": node_id, "tracking_frame": self.tracking_frame, "calibration": self.calibration }
-        response = requests.post(gl_api_endpoint+"node_update", json=data)
+        response = requests.put(gl_api_endpoint+"node_update", json=data)
 
         if response.status_code != 200:
+            print("Error updating node")
             print(response.text)
             raise MyException("Grassland API Error Code: "+str(response.status_code))
 
