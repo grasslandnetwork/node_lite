@@ -48,6 +48,8 @@ ap.add_argument("--video", type=str,
                 help="path to input video file")
 ap.add_argument("--picamera", type=int, default=-1,
                 help="whether or not the Raspberry Pi camera should be used")
+ap.add_argument("--mode", type=str, default='ONLINE',
+                help="'ONLINE' or 'CALIBRATING'")
 ap.add_argument("--rotation", type=int, default=0,
                 help="Sets Rasperry Pi camera's clockwise rotation. Valid values are 0, 90, 180, and 270.")
 ap.add_argument("--tracker", type=str, default="mosse",
@@ -200,7 +202,7 @@ def add_to_o_queue(detected_frame_tuple):
         
 
 
-
+print("NODE MODE IS", args['mode'])
 # if a video path was not supplied, grab the reference to the web cam
 if not args.get("video", False):
     framerate = 30
@@ -228,6 +230,8 @@ else:
 Here we calculate and set the linear map (transformation matrix) that we use to turn the pixel coordinates of the objects on the frame into their corresponding lat/lng coordinates in the real world. It's a computationally expensive calculation and requires inputs from the camera's calibration (frame of reference in the real world) so we do it once here instead of everytime we need to do a transformation from pixels to lat/lng
 '''
 rw = RealWorldCoordinates()
+rw.tracking_frame = {"height": tracking_frame_width*frame_ratio, "width": tracking_frame_width}
+rw.node_update()
 rw.set_transform() 
 
 
@@ -261,15 +265,28 @@ print("Waiting "+str(lambda_wakeup_duration)+" seconds for function to wake up..
 time.sleep(lambda_wakeup_duration)
 
 gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
-def post_tracklet(tracklet_dict):
+def post_tracklet(tracklets_dict):
     post_tracklet_start_time = time.time()
 
     print("Making request on lambda")
-    response = requests.post(gl_api_endpoint+"tracklets_create", json=tracklet_dict)
+    if args['mode'] == 'ONLINE':
+        tracklets_dict['node_mode'] = 'ONLINE'
+        response = requests.post(gl_api_endpoint+"tracklets_create", json=tracklets_dict)
+    elif args['mode'] == 'CALIBRATING':
+        tracklets_dict['node_mode'] = 'CALIBRATING'
+        response = requests.post(gl_api_endpoint+"tracklets_create", json=tracklets_dict)
+
 
     end_time = time.time()
 
     print("TRACKLET ROUND TRIP TIME:", end_time-post_tracklet_start_time)
+
+    if args['mode'] == 'CALIBRATING': # To compare to when frames show up on server
+        try:
+            print("TRACKLET 'frame_timestamp'", tracklets_dict['tracklets'][0]['frame_timestamp'])
+        except:
+            pass
+    
 
         
 def tracklets_loop():
@@ -281,10 +298,10 @@ def tracklets_loop():
                 try:
                     if not tracklets_queue.empty():
 
-                        tracklet_dict = tracklets_queue.get(block=False)
+                        tracklets_dict = tracklets_queue.get(block=False)
 
                         before_executor = time.time()
-                        executor.submit(post_tracklet, tracklet_dict)
+                        executor.submit(post_tracklet, tracklets_dict)
                         print("Tracklet Executor Time:", time.time()-before_executor)
 
                     else:
@@ -889,6 +906,9 @@ try:
             frame = imutils.resize(frame, width=tracking_frame_width)
 
 
+
+
+                
             if not frame_dimensions_set: # Important For Homography to real world coordinates (lat/long)
                 height, width, channels = frame.shape
                 # Tell Grassland what the frame dimensions are for camera calibration
@@ -897,6 +917,14 @@ try:
                 
                 frame_dimensions_set = True
 
+                
+            if args['mode'] == 'CALIBRATING':
+                try:
+                    if int((datetime.now() - set_transform_since).total_seconds()) > 4: # Rebuild RW transformation matrix every 4 seconds
+                        set_transform_since = datetime.now()
+                        rw.set_transform()
+                except:
+                    set_transform_since = datetime.now()
 
 
             # current_main_fps = main_fps._numFrames / (datetime.now() - main_fps._start).total_seconds()
