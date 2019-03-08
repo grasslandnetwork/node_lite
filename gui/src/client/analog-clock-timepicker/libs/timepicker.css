@@ -1,0 +1,101 @@
+
+/****************************************************
+ * Directly Draggable Analog-Clock Style Timepicker *
+ *                                                  *
+ * Design by ZulNs @Yogyakarta, February 2016       *
+ ****************************************************/
+
+.timepicker {
+	position: relative;
+	width: 257px;
+	height: 286px;
+	padding: 10px;
+	font: 16px arial;
+	display: block;
+	/* margin-top: 10px; */
+	float: right;
+}
+.timepicker .clock-face,
+.timepicker .hour-hand,
+.timepicker .minute-hand,
+.timepicker .second-hand {
+	position: absolute;
+}
+.timepicker .hour-hand {
+	-webkit-transform-origin: 50% 70px;
+	-moz-transform-origin: 50% 70px;
+	-ms-transform-origin: 50% 70px;
+	-o-transform-origin: 50% 70px;
+	transform-origin: 50% 70px;
+	left: 120px;
+	top: 60px;
+}
+.timepicker .minute-hand,
+.timepicker .second-hand {
+	-webkit-transform-origin: 50% 90px;
+	-moz-transform-origin: 50% 90px;
+	-ms-transform-origin: 50% 90px;
+	-o-transform-origin: 50% 90px;
+	transform-origin: 50% 90px;
+	top: 40px;
+}
+.timepicker .minute-hand {
+	left: 124px;
+}
+.timepicker .second-hand {
+	left: 126px;
+}
+.timepicker .picked-time,
+.timepicker .picked-date,
+.timepicker .button {
+	position: absolute;
+	text-align: center;
+	vertical-align: middle;
+}
+.timepicker .picked-time,
+.timepicker .picked-date {
+	top: 260px;
+	left: 62px;
+	width: 140px;
+	height: 36px;
+	line-height: 36px;
+	color: #246;
+	text-align: center;
+	font-size: 1.75em;
+	font-weight: bold;
+	text-shadow: 1px 1px 2px #fff;
+	cursor: default;
+}
+.timepicker .picked-date {
+	top: 300px !important;
+	font-size: 1.35em !important;
+}
+.timepicker .button.hour {
+	left: 15px;
+}
+.timepicker .button.ok {
+	right: 6px;
+}
+.timepicker .button {
+	top: 263px;
+	width: 48px;
+	height: 30px;
+	line-height: 30px;
+	cursor: pointer;
+	font-size: 0.9em;
+	color: #eee;
+	background: #07f;
+	border: 1px solid #05a;
+	-moz-border-radius: 4px;
+	-webkit-border-radius: 4px;
+	border-radius: 4px;
+	-moz-box-shadow: 0 2px 4px rgba(0,0,0,.5);
+	-webkit-box-shadow: 0 2px 4px rgba(0,0,0,.5);
+	box-shadow: 0 2px 4px rgba(0,0,0,.5);
+}
+.timepicker .button:active {
+	border: 2px solid #05a;
+	-webkit-box-shadow: none;
+	-moz-box-shadow: none;
+	box-shadow: none;
+}

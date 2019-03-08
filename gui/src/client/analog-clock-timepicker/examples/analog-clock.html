@@ -1,0 +1,39 @@
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+	<!--meta http-equiv="refresh" content="1;url="-->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="author" content="ZulNs">
+	<meta name="keywords" content="">
+	<meta name="description" content="">
+	<meta name="robots" content="all">
+	<meta name="copyright" content="ZulNs">
+	<title>Realtime Analog Clock</title>
+	<!--link rel="icon" href="favicon.svg" type="image/svg+xml" /-->
+</head>
+<body>
+    <h1></h1>
+	<p>Designed by ZulNs @Yogyakarta, February 2016</p>
+	<div id="clock"></div>
+	<p>See API Documentation:
+		<ul>
+			<li><a href="../docs/timepicker-api-doc.md" target="_blank">Markdown version</a></li>
+			<li><a href="../docs/timepicker-api-doc.html" target="_blank">HTML version</a></li>
+		</ul>
+	</p>
+	<link rel="stylesheet" href="../libs/timepicker.css" />
+	<script type="text/javascript" src="../libs/timepicker.js"></script>
+	<script type="text/javascript">
+		document.querySelector('h1').innerHTML = document.title;
+
+		var clock = new Timepicker(true);
+		document.getElementById('clock').appendChild(clock.getElement());
+		clock.show();
+
+		clock.callback = function() {
+			clock.show(); // prevent the widget from being closed
+		};
+</script>
+</body>
+</html>
