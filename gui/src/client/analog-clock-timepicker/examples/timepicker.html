@@ -1,0 +1,54 @@
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+	<!--meta http-equiv="refresh" content="1;url="-->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="author" content="ZulNs">
+	<meta name="keywords" content="">
+	<meta name="description" content="">
+	<meta name="robots" content="all">
+	<meta name="copyright" content="ZulNs">
+	<title>Analog Clock Timepicker</title>
+	<!--link rel="icon" href="favicon.svg" type="image/svg+xml" /-->
+</head>
+<body>
+    <h1></h1>
+	<p>Designed by ZulNs @Yogyakarta, February 2016</p>
+	<input id="picked-text" type="text" style="width: 200px;" />
+	<input id="pick-button" type="button" onclick="pickATime();" style="width: 50px;" value="pick" />
+	<div id="timepicker"></div>
+	<p>See API Documentation:
+		<ul>
+			<li><a href="../docs/timepicker-api-doc.md" target="_blank">Markdown version</a></li>
+			<li><a href="../docs/timepicker-api-doc.html" target="_blank">HTML version</a></li>
+		</ul>
+	</p>
+	<link rel="stylesheet" href="../libs/timepicker.css" />
+	<script type="text/javascript" src="../libs/timepicker.js"></script>
+	<script type="text/javascript">
+	 document.querySelector('h1').innerHTML = document.title;
+	 
+	 var pickedTxt = document.getElementById('picked-text'),
+		 pickBtn = document.getElementById('pick-button'),
+		 timepicker = new Timepicker();
+	 document.getElementById('timepicker').appendChild(timepicker.getElement());
+	 timepicker.getElement().style.marginTop = '10px';
+	 timepicker.show();
+	 timepicker.callback = function() {
+		 pickBtn.style.display = 'inline-block';
+		 // pickedTxt.value = timepicker.getTimeString();
+		 pickedTxt.value = timepicker.getTimestamp();
+		 pickedTxt.selectionStart = 0;
+		 pickedTxt.selectionEnd = pickedTxt.value.length;
+		 pickedTxt.focus();
+	 };
+
+	 function pickATime() {
+		 pickBtn.style.display = 'none';
+		 pickedTxt.value = '';
+		 timepicker.show();
+	 }
+	</script>
+</body>
+</html>

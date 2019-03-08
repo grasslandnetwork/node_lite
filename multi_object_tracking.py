@@ -7,9 +7,6 @@ import imutils
 import time
 import cv2
 from lnglat_homography import RealWorldCoordinates
-import firebase_admin
-from firebase_admin import credentials
-from firebase_admin import firestore
 from datetime import datetime, timezone
 import os
 import numpy as np
@@ -17,7 +14,6 @@ import multiprocessing
 from multiprocessing import Queue, Pool
 from queue import PriorityQueue
 from queue import Empty
-
 import requests
 import boto3
 import botocore
@@ -31,14 +27,19 @@ import concurrent.futures
 from pyimagesearch.centroidtracker import CentroidTracker
 from pyimagesearch.trackableobject import TrackableObject
 
+import plyvel
+import s2sphere
+
+import websockets
+
+import gevent
+from gevent.server import StreamServer
+from gevent.queue import Queue as GeventQueue
+
+from multiprocessing import Value
+
 node_id = os.environ['NODE_ID']
-
-# Use a service account
-cred = credentials.Certificate(os.environ['FIREBASE_CREDENTIALS'])
-firebase_admin.initialize_app(cred)
-
-gl_db = firestore.client()
-gl_nodes = gl_db.collection(u'nodes')
+frame_s3_bucket_name = os.environ['GRASSLAND_FRAME_S3_BUCKET']
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
@@ -84,9 +85,11 @@ tracking_frame_width = 500
 delta_thresh = int(tracking_frame_width/125)
 min_area = int(tracking_frame_width/25)
 
+run_tracklets_socket_server = Value('i', 1)
+
 
 s3_res = boto3.resource('s3')
-s3_bucket = s3_res.Bucket('grassland-images')
+s3_bucket = s3_res.Bucket(frame_s3_bucket_name)
 
 lambda_url = os.environ['LAMBDA_DETECTION_URL']
 
@@ -94,11 +97,15 @@ tracklets_queue_max = 100
 o_queue_max = 80
 p_queue_max = 300
 
-tracklets_queue = Queue() # tracklets queue    
+tracklets_queue = Queue() # tracklets queue
+mapserver_tracklets_queue = GeventQueue() # calibration tracklets queue    
 i_queue = Queue() # input queue    
 o_queue = Queue(maxsize=o_queue_max) # output queue
 p_queue = PriorityQueue(maxsize=p_queue_max) # priority queue
 
+
+#### !!! WARNING !!! --> Store s2sphere in bigendian format to order bytes lexicographically in LevelDB
+s2sphere_byteorder = 'big'
 
 def delete_from_s3(s3_bucket, file_name_ext):
     try:
@@ -135,8 +142,7 @@ def get_detections(frame_number, frame, frame_timestamp, no_callback=False):
         print("S3 Upload Time:", time.time()-image_start_time)
 
         print("Making request on lambda")
-        #print(lambda_url+"?bucket=grassland-images&key="+file_name_ext)
-        response = requests.get(lambda_url+"?bucket=grassland-images&key="+file_name_ext)
+        response = requests.get(lambda_url+"?bucket="+frame_s3_bucket_name+"&key="+file_name_ext)
 
         end_time = time.time()
 
@@ -225,24 +231,41 @@ else:
     # loop over frames from the video stream
 
 
+
+
     
 '''
 Here we calculate and set the linear map (transformation matrix) that we use to turn the pixel coordinates of the objects on the frame into their corresponding lat/lng coordinates in the real world. It's a computationally expensive calculation and requires inputs from the camera's calibration (frame of reference in the real world) so we do it once here instead of everytime we need to do a transformation from pixels to lat/lng
 '''
-rw = RealWorldCoordinates()
-rw.tracking_frame = {"height": tracking_frame_width*frame_ratio, "width": tracking_frame_width}
-rw.node_update()
-rw.set_transform() 
+rw = RealWorldCoordinates({"height": tracking_frame_width*frame_ratio, "width": tracking_frame_width})
+if args['mode'] == 'CALIBRATING':
+    rw.set_transform(calibrating=True)
+    print("set calibration")
+else:
+    rw.node_update()
+    rw.set_transform() 
 
 
+# Set Leveldb database variable
+if args['mode'] == 'CALIBRATING':
+    tracklets_db = plyvel.DB('/tmp/gl_tmp_tracklets_db/', create_if_missing=True)
+else:
+    tracklets_db = plyvel.DB('/tmp/gl_tracklets_db/', create_if_missing=True)
 
+# Use current eon number for LevelDB prefix to partition database
+# https://plyvel.readthedocs.io/en/latest/user.html#prefixed-databases
+eon_tracklets_db = tracklets_db.prefixed_db(b'\x00') 
+
+
+        
 first_frame_detected = False
 if args["display"] == 1:
     display = True
 else:
     display = False
     
-run_tracking_loop = False
+run_tracking_loop = Value('i', 0)
+run_detection_loop = Value('i', 0)
 
 count_read_frame = 0
 count_write_frame = 1
@@ -265,6 +288,7 @@ print("Waiting "+str(lambda_wakeup_duration)+" seconds for function to wake up..
 time.sleep(lambda_wakeup_duration)
 
 gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
+
 def post_tracklet(tracklets_dict):
     post_tracklet_start_time = time.time()
 
@@ -286,43 +310,190 @@ def post_tracklet(tracklets_dict):
             print("TRACKLET 'frame_timestamp'", tracklets_dict['tracklets'][0]['frame_timestamp'])
         except:
             pass
+
+
+
+
+# this handler will be run for each incoming connection in a dedicated greenlet
+def tracklets_socket_server_handler(socket, address):
+    # print('New connection for tracklets from %s:%s' % address)
+
+    # Read socket query
+    query_dict =  json.loads(socket.recv(4096).decode('utf-8'))
+    query_timestamp = query_dict['timestamp']
+    query_range = query_dict['range']
+    query_timestamp = int(query_timestamp)
+    query_range = int(query_range)
+
+
+    trackableObjects = {}
+    for key, val in eon_tracklets_db:
+        if query_timestamp <= int.from_bytes(key[8:], byteorder=s2sphere_byteorder) < query_timestamp+query_range:
+            # print("query_timestamp")
+            # print(query_timestamp)
+            # print('int.from_bytes(key[8:], byteorder=s2sphere_byteorder)')
+            # print(int.from_bytes(key[8:], byteorder=s2sphere_byteorder))
+            # print("------------------------------------------")
+            
+            cell_id = int.from_bytes(key[0:8], byteorder=s2sphere_byteorder)
+            s2_cellid = s2sphere.CellId(id_=cell_id)
+            s2_latlng = s2_cellid.to_lat_lng()
+            lat = s2_latlng.lat().degrees
+            lng = s2_latlng.lng().degrees
+            frame_timestamp = int.from_bytes(key[8:], byteorder=s2sphere_byteorder)
+
+            if val[0:16].hex() in trackableObjects:
+                
+                trackableObjects[val[0:16].hex()]['tracklets'].append(
+                    [
+                        lng,
+                        lat,
+                        frame_timestamp 
+                    ]
+                )
+            else:
+                trackableObjects[val[0:16].hex()] = {
+                    "detection_class_id": int.from_bytes(val[16:], byteorder=s2sphere_byteorder),
+                    "tracklets": [
+                        [
+                            lng,
+                            lat,
+                            frame_timestamp
+                        ]
+                    ]
+                }
+
+    
+    trackable_object_list = []
+    for object_id, trackableObject in trackableObjects.items():
+
+        trackable_object_list.append(
+
+            {
+                "object_id": object_id,
+                "detection_class_id": trackableObject['detection_class_id'],
+                "vendor": trackableObject['detection_class_id'],
+                "tracklets": trackableObject['tracklets']
+            }
+        )
     
 
+    if len(trackable_object_list) > 0:
+        socket.sendall(bytes(str(trackable_object_list), 'utf-8'))
+        print("sent "+str(len(trackable_object_list))+ " trackable objects for query_timestamp "+str(query_timestamp))
+        #print(str(trackable_object_list))
+    else:
+        socket.sendall(bytes(str([]), 'utf-8')) # send an empty list
         
+
+#### !!! WARNING !!! --> If writing to LevelDB in this loop, only run this in one process and avoid threads unless you use locking
+# ... https://github.com/google/leveldb/blob/master/doc/index.md#concurrency
+#### !!! WARNING !!! --> Store s2sphere in bigendian format to order bytes lexicographically in LevelDB
 def tracklets_loop():
     try:
+
+
+        # print("Start gevent server socket for mapserver to get tracklets")
+        tracklets_socket_server = StreamServer(('127.0.0.1', 8766), tracklets_socket_server_handler)
+        tracklets_socket_server.start()
+
+
         print("STARTING TRACKLETS_LOOP")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-            while True:
 
-                try:
-                    if not tracklets_queue.empty():
+        while True:
 
-                        tracklets_dict = tracklets_queue.get(block=False)
+            try:
+                
+                if run_tracklets_socket_server.value == 0:
+                    tracklets_socket_server.stop(timeout=3)
 
-                        before_executor = time.time()
-                        executor.submit(post_tracklet, tracklets_dict)
-                        print("Tracklet Executor Time:", time.time()-before_executor)
+                    break
 
-                    else:
-                        try:
-                            if int((datetime.now() - idle_since).total_seconds()) > 40:
-                                idle_since = datetime.now()
-                                print("no tracklets_queue items for tracklets loop .................")
-                        except:
+
+                gevent.wait(timeout=1) # https://stackoverflow.com/a/10292950/8941739
+                
+                if not tracklets_queue.empty():
+
+                    trackable_object = tracklets_queue.get(block=False)
+
+                    with eon_tracklets_db.write_batch() as eon_tracklets_wb:
+                        
+                        for oid in trackable_object.oids:
+                            bbox_rw_coords = oid['bbox_rw_coords']
+
+                            lat = oid['bbox_rw_coords']['btm_center']['lat']
+                            lng = oid['bbox_rw_coords']['btm_center']['lng']
+
+                            '''
+                            #### DISCREPANCY: S2sphere Cells VS. Lat, Lng
+                            Since we're storing values in the database as s2sphere cells and not lat, lng coordinates the best precision we can get amounts to dividing up the earth into square centimeters, it's highest cell level. And if you ask for the lat, lng coordinate of that cell, it'll return the lat, lng coordinate at the centre of that cell. But the precision of the lat, lng coordinates from the map server is higher so the function "s2sphere.LatLng.from_degrees" will take any lat, lng coordinate you give it and return the cell in which it resides whose centre will always be half a centimetre or less away from it. So there will always be a discrepancy between the lat, lng coordinates coming from the map server/homography function and the lat, lng coordinate associated with the centre of the cell that is actually entered into the database. The lat, lng discrepancy can range from 1.0e-8 to 1.0e-10 degrees. 
+                            '''
+
+                            s2_latlng = s2sphere.LatLng.from_degrees(lat, lng)
+                            s2_cellid = s2sphere.CellId.from_lat_lng(s2_latlng)
+
+                            # Take the s2sphere cell ID (a 64-bit integer) and convert it to an 8 byte big-endian Python bytes object
+                            cell_id_as_bytes = s2_cellid.id().to_bytes(8, byteorder=s2sphere_byteorder)
+                            # Get the timestamp for when this tracklet occurred (But which end?)
+                            frame_timestamp = oid['frame_timestamp'] # In milliseconds
+                            # Convert frame_timestamp back to int since when it comes back from CentroidTracker it has a ".0" at the end
+                            frame_timestamp = int(frame_timestamp)
+                            # Convert that timestamp to bytes
+                            frame_timestamp_as_bytes = frame_timestamp.to_bytes(6, byteorder=s2sphere_byteorder)
+                            # Concatenate those bytes together. This is the LevelDB 'key' 
+                            key = bytes(0).join( ( cell_id_as_bytes, frame_timestamp_as_bytes ) )
+
+                            # The LevelDB 'value' is the concatenation of the objectID and its the detection_class_id 
+                            # Convert objectID to bytes
+                            objectID_as_bytes = bytes.fromhex(trackable_object.objectID) # 16 bytes
+                            # Convert detection_class_id to bytes
+                            detection_class_id_as_bytes  = (trackable_object.detection_class_id).to_bytes(2, byteorder=s2sphere_byteorder)
+                            value = bytes(0).join( ( objectID_as_bytes, detection_class_id_as_bytes ) )
+
+                            # Set the key value pair to be written to the database
+                            eon_tracklets_wb.put(key, value)
+
+                            # # print('Original Lat Lng')
+                            # # print('OR lat ', lat)
+                            # # print('OR lng ', lng)
+
+                            # # print('S2 Lat Lng')
+                            # s2_latlng_dup = s2_cellid.to_lat_lng()
+                            # s2_lat = s2_latlng_dup.lat().degrees
+                            # s2_lng = s2_latlng_dup.lng().degrees
+                            # # print('s2 lat ', s2_lat)
+                            # # print('s2 lng ', s2_lng)
+
+                            # # print('DIFFERENCE lat ', lat - s2_latlng_dup.lat().degrees)
+                            # # print('DIFFERENCE lng ', lng - s2_latlng_dup.lng().degrees)
+
+
+                    if args['mode'] == 'CALIBRATING': # If we're in calibration mode show user the frame_timestamp
+                        print("last frame_timestamp")
+                        my_tz = datetime.now(timezone.utc).astimezone().tzinfo # Get local timezone
+                        print( datetime.fromtimestamp(frame_timestamp/1000, my_tz).strftime("%B %d, %Y %I:%M %p") )
+
+
+
+                else:
+                    try:
+                        if int((datetime.now() - idle_since).total_seconds()) > 40:
                             idle_since = datetime.now()
+                            print("no tracklets_queue items for tracklets loop .................")
+                    except:
+                        idle_since = datetime.now()
 
 
 
-                except Empty:
-                    print("tracklets_queue empty error")                        
-                except KeyboardInterrupt:
-                    import traceback
-                    traceback.print_exc()
-                    raise                
-                except:
-                    import traceback
-                    traceback.print_exc()
+            except Empty:
+                print("tracklets_queue empty error")                        
+            except KeyboardInterrupt:
+                import traceback
+                traceback.print_exc()
+                raise                
+            except:
+                import traceback
+                traceback.print_exc()
 
     except KeyboardInterrupt:
         import traceback
@@ -333,9 +504,15 @@ def tracklets_loop():
         traceback.print_exc()
 
 
+    
 def tracking_loop():
     try:
-        print("STARTING TRACKING_LOOP")
+        
+        if run_tracking_loop.value:
+            print("STARTING TRACKING_LOOP")
+        else:
+            return
+        
         #global tracking_loop_fps
         tracking_loop_fps = FPS().start()
         
@@ -348,8 +525,7 @@ def tracking_loop():
         trackableObjects = {}
         
         
-        #while run_tracking_loop:
-        while True:
+        while run_tracking_loop.value:
             # Pull first/next frame tuple from p_queue
             #queue_get_start_time = time.time()
 
@@ -376,6 +552,7 @@ def tracking_loop():
                 print("No More Frames In p_queue")
                 tracking_loop_fps.stop()
                 print("[INFO] approx. Tracking_Loop FPS: {:.2f}".format(tracking_loop_fps.fps()))
+                run_tracking_loop.value = 0
                 return
             
             #print("queue_get_start_time Time:", time.time()-queue_get_start_time)
@@ -478,6 +655,8 @@ def tracking_loop():
 
                             
                             if track_centroids:
+                                # print("track_centroids frame_timestamp")
+                                # print(frame_timestamp)
                                 rects.append((xmin, ymin, xmax, ymax, frame_timestamp, detection_class_id))
                         
                             if display:
@@ -496,27 +675,47 @@ def tracking_loop():
                         # centroids with (2) the object detections
                         objects = ct.update(rects, True)
 
-                        # loop over the tracked objects to add them to objectsPositions and to trackableObjects
-                        objectsPositions = []
-                        for (objectID, (centroid, boxoid)) in objects.items():
+                        # # loop over the tracked objects to add them to objectsPositions and to trackableObjects
+                        # objectsPositions = []
+                        for (objectID, (centroid_frame_timestamp, centroid_detection_class_id, centroid, boxoid)) in objects.items():
 
+                            if ct.disappeared[objectID] != 0:
+                                continue
+                                
+
+                                
+                            # # Calculate bottom center pixel coordinates
+                            # #bottom_center_x = (boxoid[0] + boxoid[2]) / 2
+                            # bottom_center_x = centroid[0]
+                            # bottom_center_y = boxoid[3]
+
+
+                            # objectsPositions.append({
+                            #     "tracklet_id": objectID,
+                            #     "node_id": node_id,
+                            #     "bbox_rw_coord": {
+                            #         "btm_left": rw.coord(boxoid[0], boxoid[3]),
+                            #         "btm_right": rw.coord(boxoid[2], boxoid[3]),
+                            #         "btm_center": rw.coord(bottom_center_x, bottom_center_y)
+                            #     },
+                            #     "frame_timestamp": boxoid[4],
+                            #     "detection_class_id": boxoid[5]
+                            # })
+
+                            # Change centroid_detection_class_id from 1 x 1 numpy array to int
+                            centroid_detection_class_id = int(centroid_detection_class_id[0])
+                            
                             # Calculate bottom center pixel coordinates
                             #bottom_center_x = (boxoid[0] + boxoid[2]) / 2
                             bottom_center_x = centroid[0]
                             bottom_center_y = boxoid[3]
 
-
-                            objectsPositions.append({
-                                "tracklet_id": objectID,
-                                "node_id": node_id,
-                                "bbox_rw_coord": {
-                                    "btm_left": rw.coord(boxoid[0], boxoid[3]),
-                                    "btm_right": rw.coord(boxoid[2], boxoid[3]),
-                                    "btm_center": rw.coord(bottom_center_x, bottom_center_y)
-                                },
-                                "frame_timestamp": boxoid[4],
-                                "detection_class_id": boxoid[5]
-                            })
+                            # Add bottom center pixel coordinates to trackable object
+                            bbox_rw_coords = {
+                                "btm_left": rw.coord(boxoid[0], boxoid[3]),
+                                "btm_right": rw.coord(boxoid[2], boxoid[3]),
+                                "btm_center": rw.coord(bottom_center_x, bottom_center_y)
+                            }
 
                                 
                             # check to see if a trackable object exists for the current
@@ -525,7 +724,7 @@ def tracking_loop():
 
                             # if there is no existing trackable object, create one
                             if to is None:
-                                to = TrackableObject(objectID, centroid, boxoid)
+                                to = TrackableObject(objectID, centroid_frame_timestamp, centroid_detection_class_id, centroid, boxoid, bbox_rw_coords)
 
                             # otherwise, there is a trackable object so we can utilize it
                             # to determine direction
@@ -534,42 +733,48 @@ def tracking_loop():
                                 # centroid and the mean of *previous* centroids will tell
                                 # us in which direction the object is moving (negative for
                                 # 'up' and positive for 'down')
-                                y = [c[1] for c in to.centroids]
-                                direction = centroid[1] - np.mean(y)
-                                to.centroids.append(centroid)
-                                to.boxoids.append(boxoid)
+                                # y = [c[1] for c in to.centroids]
+                                # if len(y) > 0: # to avoid 'invalid value encountered in double_scalars' error (https://stackoverflow.com/a/33898520/8941739)
+                                #     direction = centroid[1] - np.mean(y)
+                                #to.append_centroid(centroid)
+                                #to.append_boxoid(boxoid)
+                                to.append_oids(centroid_frame_timestamp, centroid_detection_class_id, centroid, boxoid, bbox_rw_coords)
+
+
 
 
                             # store the trackable object in our dictionary
                             trackableObjects[objectID] = to
 
-
                             
                         ## Put tracklet tip data in queue via a separate process/thread
                         ## To update their position in database
-                        tracklets_queue.put({ "tracklets": objectsPositions })                                
+                        # tracklets_queue.put({ "tracklets": objectsPositions })                                
 
                         
 
                         # For all the objects in trackableObjects
 
-                        # After updating, if object has been marked as "disappeared"
-                        # then add it to disappeared_objects list
-                        disappeared_objects = []
+                        # After updating, if object has been marked as "deregistered" ...
+                        # ... it's been completely tracked, add it to deregistered_objects list
+                        deregistered_objects = []
                         for object_id, trackableObject in trackableObjects.items():
-                                
-                            # If the object has disappeared, remove it from trackableObjects
+                            
                             if not ct.objects.get(object_id, False): 
-                                disappeared_objects.append(object_id)
-
-
+                                deregistered_objects.append(object_id)
 
                         
-                        # Remove "disappeared" objects from trackableObjects
-                        for object_id in disappeared_objects:
-                            # print('DELETE '+str(object_id)+' OBJECT')
-                            del trackableObjects[object_id]
+                        # For each object in deregistered_objects
+                        for object_id in deregistered_objects:
+                            # ... mark the corresponding trackableObject's (in trackableObjects) 'complete' property as True
+                            trackableObjects[object_id].complete = True
 
+                            # If this trackable object has a detection, add this it to tracklets_queue for seralization/storage
+                            if trackableObjects[object_id].detection_class_id > 0:
+                                tracklets_queue.put(trackableObjects[object_id])                          
+
+                            # Now remove this completed trackable object from the trackableObjects dictionary
+                            del trackableObjects[object_id]
 
                             
                         # -> if track_centroids
@@ -612,10 +817,10 @@ def tracking_loop():
                     
                     # -> if frame_dict.get("detected") == 1: else:
 
-                    
+
+                ## MOTION DETECTION. Accumulate the weighted average on every frame even if it's already detected
                 gray = cv2.cvtColor(this_frame, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
-
                 # if the average frame is None, initialize it
                 if avg is None:
                     print("[INFO] starting background model...")
@@ -623,7 +828,7 @@ def tracking_loop():
                     #rawCapture.truncate(0)
                     #continue
                     cnts = []
-
+                    
                 else:
                     # accumulate the weighted average between the current frame and
                     # previous frames, then compute the difference between the current
@@ -642,9 +847,9 @@ def tracking_loop():
                             cv2.CHAIN_APPROX_SIMPLE)
                     cnts = cnts[0] if imutils.is_cv2() else cnts[1]
 
-    
+                
 
-                if track_centroids:
+                if track_centroids and frame_dict.get("detected") == 0:
                     rects = []
 
                 # loop over the contours
@@ -665,48 +870,68 @@ def tracking_loop():
                     startY = y
                     endX = x + w
                     endY = y + h
-
-                    if track_centroids:
+                    
+                    if track_centroids and frame_dict.get("detected") == 0:
                         # add the bounding box coordinates to the rectangles list
                         # put 0 in detection_class_id section since we don't have a detection yet
                         rects.append((startX, startY, endX, endY, frame_timestamp, 0))
 
-
-                if track_centroids:
+                if track_centroids and frame_dict.get("detected") == 0:
                     # use the centroid tracker to associate the (1) old object
                     # centroids with (2) the newly computed object centroids
                     objects = ct.update(rects)
+                    
+                    # # loop over the tracked objects to add them to objectsPositions and to trackableObjects
+                    # objectsPositions = []
 
-                    # loop over the tracked objects to add them to objectsPositions and to trackableObjects
-                    objectsPositions = []
-                    for (objectID, (centroid, boxoid)) in objects.items():
+                    for (objectID, (centroid_frame_timestamp, centroid_detection_class_id, centroid, boxoid)) in objects.items():
+
+                        if ct.disappeared[objectID] != 0:
+                            continue
+
+                        # # Calculate bottom center pixel coordinates
+                        # #bottom_center_x = (boxoid[0] + boxoid[2]) / 2
+                        # bottom_center_x = centroid[0]
+                        # bottom_center_y = boxoid[3]
+
+
+                        # objectsPositions.append({
+                        #     "tracklet_id": objectID,
+                        #     "node_id": node_id,
+                        #     "bbox_rw_coord": {
+                        #         "btm_left": rw.coord(boxoid[0], boxoid[3]),
+                        #         "btm_right": rw.coord(boxoid[2], boxoid[3]),
+                        #         "btm_center": rw.coord(bottom_center_x, bottom_center_y)
+                        #     },
+                        #     "frame_timestamp": boxoid[4],
+                        #     "detection_class_id": boxoid[5]
+                        # })
+
+                        # Change centroid_detection_class_id from 1 x 1 numpy array to int
+                        centroid_detection_class_id = int(centroid_detection_class_id[0])
+
 
                         # Calculate bottom center pixel coordinates
                         #bottom_center_x = (boxoid[0] + boxoid[2]) / 2
                         bottom_center_x = centroid[0]
                         bottom_center_y = boxoid[3]
 
+                        # Add bottom center pixel coordinates to trackable object
+                        #to.bbox_rw_coords.append(
+                        bbox_rw_coords = {
+                            "btm_left": rw.coord(boxoid[0], boxoid[3]),
+                            "btm_right": rw.coord(boxoid[2], boxoid[3]),
+                            "btm_center": rw.coord(bottom_center_x, bottom_center_y)
+                        }
 
-                        objectsPositions.append({
-                            "tracklet_id": objectID,
-                            "node_id": node_id,
-                            "bbox_rw_coord": {
-                                "btm_left": rw.coord(boxoid[0], boxoid[3]),
-                                "btm_right": rw.coord(boxoid[2], boxoid[3]),
-                                "btm_center": rw.coord(bottom_center_x, bottom_center_y)
-                            },
-                            "frame_timestamp": boxoid[4],
-                            "detection_class_id": boxoid[5]
-                        })
-
-                            
+                        
                         # check to see if a trackable object exists for the current
                         # object ID
                         to = trackableObjects.get(objectID, None)
 
                         # if there is no existing trackable object, create one
                         if to is None:
-                            to = TrackableObject(objectID, centroid, boxoid)
+                            to = TrackableObject(objectID, centroid_frame_timestamp, centroid_detection_class_id, centroid, boxoid, bbox_rw_coords)
 
                         # otherwise, there is a trackable object so we can utilize it
                         # to determine direction
@@ -715,10 +940,14 @@ def tracking_loop():
                             # centroid and the mean of *previous* centroids will tell
                             # us in which direction the object is moving (negative for
                             # 'up' and positive for 'down')
-                            y = [c[1] for c in to.centroids]
-                            direction = centroid[1] - np.mean(y)
-                            to.centroids.append(centroid)
-                            to.boxoids.append(boxoid)
+                            # y = [c[1] for c in to.centroids]
+
+                            # if len(y) > 0: # to avoid 'invalid value encountered in double_scalars' error (https://stackoverflow.com/a/33898520/8941739)
+                            #     direction = centroid[1] - np.mean(y)
+                                
+                            #to.append_centroid(centroid)
+                            #to.append_boxoid(boxoid)
+                            to.append_oids(centroid_frame_timestamp, centroid_detection_class_id, centroid, boxoid, bbox_rw_coords)
 
                             # # check to see if the object has been counted or not
                             # if not to.counted:
@@ -736,9 +965,29 @@ def tracking_loop():
                             #         totalDown += 1
                             #         to.counted = True
 
+
+                            
+
+
+
                         # store the trackable object in our dictionary
                         trackableObjects[objectID] = to
 
+                        # print("trackableObjects key")
+                        # trackable_objects_key = next(iter(trackableObjects))
+                        # print(trackable_objects_key)
+                        # print("trackable_object centroids")
+                        # print(trackableObjects[trackable_objects_key].centroids)
+
+                        # print("trackable_object boxoids")
+                        # print(trackableObjects[trackable_objects_key].boxoids)
+
+                        # print("trackable_object")
+                        # obj = trackableObjects[trackable_objects_key]
+                        # for attr in dir(obj):
+                        #     print("obj.%s = %r" % (attr, getattr(obj, attr)))
+
+                        
                         if display:
                             # draw both the ID of the object and the centroid of the
                             # object on the output frame
@@ -748,13 +997,12 @@ def tracking_loop():
                             cv2.circle(this_frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
 
 
-                            
                     ## Put tracklet tip data in queue via a separate process/thread
                     ## To update their position in database
-                    tracklets_queue.put({ "tracklets": objectsPositions })                                
+                    #tracklets_queue.put({ "tracklets": objectsPositions })                                
 
                     
-                    # -> if track_centroids
+                    # -> if track_centroids and frame_dict.get("detected") == 0:
 
                     
                 if display:
@@ -800,7 +1048,7 @@ def tracking_loop():
                 # -> if frame_number > frame_loop_count: else:
 
             
-            # -> while True:
+            # -> while run_tracking_loop.value:
                 
             
     except:
@@ -812,8 +1060,13 @@ def tracking_loop():
 
 def detection_loop():
     try:
-        print("STARTING DETECTION_LOOP")
-        while True:
+
+        if run_detection_loop.value:
+            print("STARTING DETECTION_LOOP")
+        else:
+            return
+            
+        while run_detection_loop.value:
 
             try:
                 if not i_queue.empty():
@@ -827,9 +1080,14 @@ def detection_loop():
 
                 else:
                     try:
-                        if int((datetime.now() - idle_since).total_seconds()) > 40:
+                        if int((datetime.now() - idle_since).total_seconds()) > 40: # If this loop has been idle
                             idle_since = datetime.now()
                             print("no i_queue items for detection loop .................")
+
+                            if args['mode'] == 'CALIBRATING': # If we're in calibration mode and ...
+                                if not run_tracking_loop.value: # ... the tracking loop's been stopped
+                                    run_detection_loop.value = 0 # stop this loop
+
                     except:
                         idle_since = datetime.now()
 
@@ -858,7 +1116,15 @@ def detection_loop():
 def o_queue_exceeds_safe_threshold():
     return o_queue.qsize() > int(o_queue_max *0.9)
 
-    
+
+# if args['mode'] == 'CALIBRATING':
+#     print("Start gevent server socket for mapserver to get tracklets")
+
+#     tracklets_socket_server = StreamServer(('127.0.0.1', 8766), tracklets_socket_server_handler)
+#     tracklets_socket_server.start()
+
+
+run_detection_loop.value = 1            
 dl = multiprocessing.Process(target=detection_loop)
 dl.daemon = True
 dl.start()
@@ -866,6 +1132,7 @@ dl.start()
 tsl = multiprocessing.Process(target=tracklets_loop)
 tsl.daemon = True
 tsl.start()
+
 
 #pool = Pool(1, detection_loop)
 #pool.apply_async(func=detection_loop, args=())
@@ -905,9 +1172,6 @@ try:
             large_frame = imutils.resize(frame, width=detection_frame_width)
             frame = imutils.resize(frame, width=tracking_frame_width)
 
-
-
-
                 
             if not frame_dimensions_set: # Important For Homography to real world coordinates (lat/long)
                 height, width, channels = frame.shape
@@ -922,7 +1186,7 @@ try:
                 try:
                     if int((datetime.now() - set_transform_since).total_seconds()) > 4: # Rebuild RW transformation matrix every 4 seconds
                         set_transform_since = datetime.now()
-                        rw.set_transform()
+                        rw.set_transform(calibrating=True)
                 except:
                     set_transform_since = datetime.now()
 
@@ -967,8 +1231,7 @@ try:
                 #     dl.run()
 
 
-                #import pdb; pdb.set_trace()
-            else:
+            else: # ... then don't perform detection on frame but just use for tracking (tracklet association) 
                 if not o_queue_exceeds_safe_threshold(): # Skipping when it's 90% full. The remaining 10% is given to detected frames
                     # store frame in output queue
                     o_queue.put((main_fps._numFrames, {"detected": 0, "frame": frame, "frame_timestamp": frame_timestamp}))
@@ -989,8 +1252,8 @@ try:
             # -> if frame is not None and not np.array_equal(last_frame, frame):
 
 
-        if first_frame_detected and not run_tracking_loop:
-            run_tracking_loop = True
+        if first_frame_detected and not run_tracking_loop.value:
+            run_tracking_loop.value = 1
 
             # t = Thread(target=tracking_loop, args=())
             # t.daemon = True
@@ -1011,7 +1274,29 @@ try:
 
 
 
+    if args['mode'] == 'CALIBRATING':
+        print("CALIBRATION mode keeps socket servers running waiting for KeyboardInterrupt from user...")
+      
+        while True:
+            try:
+                
+                if dl.is_alive() and run_detection_loop.value == 0: 
+                    print("TERMINATING detection_loop")
+                    dl.terminate()
+                    time.sleep(4)
 
+                if tl.is_alive() and run_tracking_loop.value == 0:
+                    print("TERMINATING tracking_loop")
+                    tl.terminate()
+                    time.sleep(4)
+                    
+
+            except:
+                raise
+
+        
+
+        
 except:
     import traceback
     traceback.print_exc()
@@ -1021,23 +1306,30 @@ finally:
     # print("FINISHING UP ITEMS IN p_queue")
     # p_queue.join() # Only works if tracking_loop runs under same process as this
 
-    print("TERMINATING detection_loop")
-    dl.terminate()
-    print("TERMINATING tracking_loop")
-    tl.terminate()
-    print("TERMINATING tracklets_loop")
-    tsl.terminate()
-
+    print("STOPPING SOCKET SERVER tracklets_socket_server")
+    run_tracklets_socket_server.value = 0
     
-    #print("CLOSING POOL")
-    #pool.close()
-    #tracking_pool.close()
-    #print("TERMINATING POOL")
-    #pool.terminate()
-    #tracking_pool.terminate()
+    print("STOPPING SOCKET SERVER calibration_socket_server")
+    rw.calibration_socket_server.stop(timeout=3)
 
-    #pool.join()
-    #tracking_pool.join()
+    if dl.is_alive():
+        print("TERMINATING detection_loop")
+        dl.terminate()
+
+    if tl.is_alive():
+        print("TERMINATING tracking_loop")
+        tl.terminate()
+
+    if tsl.is_alive():
+        print("TERMINATING tracklets_loop")
+        tsl.terminate()
+
+
+    print("CLOSE LEVELDB tracklets DATABASE")
+    tracklets_db.close() # can't close prefixed database
+    print("CLOSE LEVELDB node DATABASE")
+    rw.node_db.close()  # can't close prefixed database
+
 
     vs.stop()
     # if we are using a webcam, release the pointer
@@ -1058,3 +1350,11 @@ finally:
     print("[INFO] elasped time: {:.2f}".format(main_fps.elapsed()))
     print("[INFO] approx. Main FPS: {:.2f}".format(main_fps.fps()))
     #print("[INFO] approx. Tracking_Loop FPS: {:.2f}".format(tracking_loop_fps.fps()))
+
+
+
+
+
+
+
+

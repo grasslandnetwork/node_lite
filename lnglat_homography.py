@@ -3,6 +3,14 @@ import cv2
 import os
 import json
 import requests
+import plyvel
+import asyncio
+import websockets
+import multiprocessing
+from multiprocessing import Queue, Pool
+import gevent
+from gevent.server import StreamServer
+import time
 
 # TL is the SE corner
 # 0, 0  = [-75.75021684378025, 45.393495598366655]
@@ -21,9 +29,14 @@ class MyException(Exception):
     pass
 
 class RealWorldCoordinates:
-    def __init__(self):
-        self.tracking_frame = {}
+    def __init__(self, tracking_frame):
+        
+        # Create node's personal leveldb database if missing
+        self.node_db = plyvel.DB('/tmp/node_db/', create_if_missing=True)
+        self.CALIBRATING = False
+        self.tracking_frame = tracking_frame
         self.calibration = {}
+
         # pts_src and pts_dst are numpy arrays of points
         # in source and destination images. We need at least 
         # 4 corresponding points. 
@@ -42,19 +55,10 @@ class RealWorldCoordinates:
         src_size = (1920, 1080)
 
         
-        self.im_dst = cv2.warpPerspective(im_src, h, dst_size)
 
 
-    def show_image(self):
-        
-
-        # Show output
-        cv2.imshow("Image", self.im_dst)
-        cv2.waitKey(0)
-
-
-
-    def set_transform(self):
+    def set_transform(self, calibrating=False):
+        self.CALIBRATING = calibrating
 
         # Get the real world transform that gets the longitude and latitude coordinates of each pixel of the realigned image
         # Using the node calibration web app, we can make a function that will allow the node to know what the real world (lat/lng) coordinates are for each pixels in it's frame
@@ -119,8 +123,22 @@ class RealWorldCoordinates:
 
         '''
         # MySQL
-        corner_names = ['ul', 'ur', 'll', 'lr']
+
+        if self.CALIBRATING:
+            # Get calibration values from Calibration Map
+            # https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.get_event_loop
+            # asyncio.get_event_loop().run_until_complete(self.call_websocket())
+            #self.msl = multiprocessing.Process(target=self.mapserver_loop)
+            #self.msl.daemon = True
+            #self.msl.start()
+            #print("Finished starting msl")
+            self.calibration_socket_server = StreamServer(('127.0.0.1', 8765), self.calibration_socket_server_handler)
+            self.calibration_socket_server.start()
+
+            
         self.node_get()
+        
+        corner_names = ['ul', 'ur', 'll', 'lr']
         for corner_name in corner_names:
             ul_lng = self.calibration['homography_points']['corners'][corner_name]['lng']
             ul_lat = self.calibration['homography_points']['corners'][corner_name]['lat']
@@ -170,31 +188,73 @@ class RealWorldCoordinates:
 
         
     def node_update(self):
+        
         self.node_get()
-        node_id = os.environ['NODE_ID']
-        gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
-        data = { "id": node_id, "tracking_frame": self.tracking_frame, "calibration": self.calibration }
-        response = requests.put(gl_api_endpoint+"node_update", json=data)
+        
+        #node_id = os.environ['NODE_ID']
+        #gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
+        # data = { "id": node_id, "tracking_frame": self.tracking_frame, "calibration": self.calibration }
+        #response = requests.put(gl_api_endpoint+"node_update", json=data)
 
-        if response.status_code != 200:
-            print("Error updating node")
-            print(response.text)
-            raise MyException("Grassland API Error Code: "+str(response.status_code))
+        tracking_frame_string = json.dumps(self.tracking_frame)
+        self.node_db.put(b'tracking_frame', bytes(tracking_frame_string, 'utf-8'))
+
+        calibration_string = json.dumps(self.calibration)
+        self.node_db.put(b'calibration', bytes(calibration_string, 'utf-8'))
+
 
         
     def node_get(self):
-        node_id = os.environ['NODE_ID']
-        gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
-        response = requests.get(gl_api_endpoint+"node_get"+"?id="+str(node_id))
 
-        if response.status_code == 200:
-            response_dict = json.loads(response.text)
-            db_result_dict = response_dict['db_results']
-            calibration = db_result_dict['calibration']
-            self.calibration = calibration
+        if self.CALIBRATING:
+            self.call_gevent_wait()
+            
+            
+        #node_id = os.environ['NODE_ID']
+        # gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
+        # response = requests.get(gl_api_endpoint+"node_get"+"?id="+str(node_id))
+
+
+        # tracking_frame = self.node_db.get(b'tracking_frame')
+        # if tracking_frame == None: # THROW ERROR
+        #     raise MyException("!!! leveldb get 'tracking_frame' returned None !!!!")
+        # else:
+        #     print(tracking_frame)
+        #     self.tracking_frame = json.loads(tracking_frame.decode("utf-8"))
+
+
+        if self.CALIBRATING:
+            calibration = self.node_db.get(b'calibration')
+            
+            if calibration == None:
+                self.call_gevent_wait() 
+                timeout = time.time() + 60*5   # 5 minutes from now
+                print("WAITING FOR YOU TO USE THE MAPSERVER TO SET THE CALIBRATION VALUES IN THE DATABASE ...")
+                while True:
+                    if time.time() > timeout:
+                        print("TIMED OUT WAITING FOR THE CALIBRATION TO BE SENT FROM THE MAP SERVER!!")
+                        break
+                    
+                    calibration = self.node_db.get(b'calibration')
+
+                    if calibration == None:
+                        self.call_gevent_wait() 
+                    else:
+                        self.calibration = json.loads(calibration.decode("utf-8"))
+                        break
+                        
+            else:
+                self.calibration = json.loads(calibration.decode("utf-8"))
+
         else:
-            print(response.text)
-            raise MyException("Grassland API Error Code: "+str(response.status_code))
+            calibration = self.node_db.get(b'calibration')
+            if calibration == None: # THROW ERROR
+                raise MyException("!!! leveldb get 'calibration' returned None. Restart with '--mode CALIBRATING' !!!!")
+            else:
+                print(calibration)
+                self.calibration = json.loads(calibration.decode("utf-8"))
+
+        
 
         
     def coord(self, x, y):
@@ -207,4 +267,115 @@ class RealWorldCoordinates:
         }
 
 
-           
+
+
+    # # Call async task of connecting to websocket on map server
+    # # https://websockets.readthedocs.io/en/stable/intro.html#basic-example
+    
+    # # Use in a class https://stackoverflow.com/a/42014617/8941739
+    # async def call_websocket(self):
+    #     async with websockets.connect('ws://localhost:8080/node_get') as websocket:
+
+    #         await websocket.send('send calibration')
+
+    #         calibration_string = await websocket.recv()
+    #         print("calibration_string")
+    #         print(calibration_string)
+
+    #         # Store calibration in leveldb
+    #         self.node_db.put(b'calibration', bytes(calibration_string, 'utf-8'))
+
+    #         # Get it back
+    #         calibration = self.node_db.get(b'calibration')
+            
+    #         print(calibration)
+    #         print(json.loads(calibration.decode("utf-8")))
+
+
+
+    
+    # def mapserver_loop(self):
+    #     async def hello(websocket, path):
+    #         name = "Map Server"
+    #         #print(f"< {name}")
+
+    #         #greeting = "Hello dear {0}!".format(name)
+
+    #         # await websocket.send(greeting)
+    #         # print(greeting)
+
+    #         print("ABOUT TO WAIT FOR CALIBRATION")
+    #         calibration_string = await websocket.recv()
+    #         print("calibration_string")
+    #         print(calibration_string)
+
+    #         # Store calibration in leveldb
+    #         self.node_db.put(b'calibration', bytes(calibration_string, 'utf-8'))
+
+    #         # Get it back
+    #         calibration = self.node_db.get(b'calibration')
+
+    #         self.calibration = json.loads(calibration.decode("utf-8"))
+            
+    #         print(self.calibration)
+    #         #print(json.loads(calibration.decode("utf-8")))
+
+
+    #         (lng, lat) = self.calibration_tracklets_queue.get()
+
+    #         print("From calibration_tracklets_queue")
+    #         print(lng, lat)
+
+
+    #     start_server = websockets.serve(hello, 'localhost', 8765)
+
+    #     asyncio.get_event_loop().run_until_complete(start_server)
+    #     asyncio.get_event_loop().run_forever()
+
+        
+    def calibration_socket_server_handler(self, socket, address):
+        # print('New connection from %s:%s' % address)
+        # print("ABOUT TO WAIT FOR CALIBRATION")
+        # calibration_string = socket.recv()
+        # print("calibration_string")
+        # print(calibration_string)
+
+        calibration_bytes_object = socket.recv(4096)
+        # print("calibration_bytes_object")
+        # print(calibration_bytes_object)
+
+
+        # Store calibration in leveldb
+        #self.node_db.put(b'calibration', bytes(calibration_string, 'utf-8'))
+        self.node_db.put(b'calibration', calibration_bytes_object)
+
+        # Get it back
+        calibration = self.node_db.get(b'calibration')
+
+        self.calibration = json.loads(calibration.decode("utf-8"))
+
+        # print(self.calibration)
+
+        # Get camera frame dimensions (frame_dim). Could pull from database but this is easier
+        tracking_frame_string = json.dumps(self.tracking_frame)
+        # Send camera frame dimensions (frame_dim)
+        socket.sendall(bytes(tracking_frame_string, 'utf-8'))
+        
+        # socket.sendall(b'Welcome to the calibration_socket_server_handler server! Type quit to exit.\r\n')
+        # # using a makefile because we want to use readline()
+        # rfileobj = socket.makefile(mode='rb')
+        # while True:
+        #     line = rfileobj.readline()
+        #     if not line:
+        #         print("client disconnected")
+        #         break
+        #     if line.strip().lower() == b'quit':
+        #         print("client quit")
+        #         break
+        #     socket.sendall(line)
+        #     print("calibration_socket_server_handlered %r" % line)
+        # rfileobj.close()
+
+
+    def call_gevent_wait(self):
+        gevent.wait(timeout=1) # https://stackoverflow.com/a/10292950/8941739
