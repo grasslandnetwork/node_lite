@@ -45,15 +45,6 @@ class RealWorldCoordinates:
         h, status = cv2.findHomography(pts_src, pts_dst)
 
 
-        # The calculated homography can be used to warp 
-        # the source image to destination. Size is the 
-        # size (width,height) of im_dst
-
-
-        im_src = cv2.imread("10.jpg")
-        dst_size = (1366, 662)
-        src_size = (1920, 1080)
-
         
 
 
