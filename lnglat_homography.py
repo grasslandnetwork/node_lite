@@ -4,25 +4,11 @@ import os
 import json
 import requests
 import plyvel
-import asyncio
-import websockets
 import multiprocessing
 from multiprocessing import Queue, Pool
 import gevent
 from gevent.server import StreamServer
 import time
-
-# TL is the SE corner
-# 0, 0  = [-75.75021684378025, 45.393495598366655]
-	
-# TR is SW Corner
-# 1366, 0 = [-75.7512298958311, 45.39309963711102]
-
-# BR is NW corner
-# 1366, 662 = [-75.75150315621723, 45.393444401619234]
-
-# BL is NE corner
-# 0, 662 = [-75.75049010416637, 45.393840360459365]
 
 
 class MyException(Exception):
@@ -44,8 +30,6 @@ class RealWorldCoordinates:
         pts_dst =  np.array([[581, 473], [618, 215], [296, 449], [281, 245]])
         h, status = cv2.findHomography(pts_src, pts_dst)
 
-
-        
 
 
     def set_transform(self, calibrating=False):
@@ -168,15 +152,6 @@ class RealWorldCoordinates:
         print(self.rw_transform(np.array([[300.0, 200.0]])))
 
 
-    # Used for Firebase's Firestore
-    # def coord(self, x, y): 
-
-    #     coord = self.rw_transform(np.array([[x, y]]))
-
-          # Returns a list (array) because of Firebase's Firestore
-    #     return [coord[0][0], coord[0][1]]
-
-
         
     def node_update(self):
         
@@ -258,78 +233,8 @@ class RealWorldCoordinates:
         }
 
 
-
-
-    # # Call async task of connecting to websocket on map server
-    # # https://websockets.readthedocs.io/en/stable/intro.html#basic-example
-    
-    # # Use in a class https://stackoverflow.com/a/42014617/8941739
-    # async def call_websocket(self):
-    #     async with websockets.connect('ws://localhost:8080/node_get') as websocket:
-
-    #         await websocket.send('send calibration')
-
-    #         calibration_string = await websocket.recv()
-    #         print("calibration_string")
-    #         print(calibration_string)
-
-    #         # Store calibration in leveldb
-    #         self.node_db.put(b'calibration', bytes(calibration_string, 'utf-8'))
-
-    #         # Get it back
-    #         calibration = self.node_db.get(b'calibration')
-            
-    #         print(calibration)
-    #         print(json.loads(calibration.decode("utf-8")))
-
-
-
-    
-    # def mapserver_loop(self):
-    #     async def hello(websocket, path):
-    #         name = "Map Server"
-    #         #print(f"< {name}")
-
-    #         #greeting = "Hello dear {0}!".format(name)
-
-    #         # await websocket.send(greeting)
-    #         # print(greeting)
-
-    #         print("ABOUT TO WAIT FOR CALIBRATION")
-    #         calibration_string = await websocket.recv()
-    #         print("calibration_string")
-    #         print(calibration_string)
-
-    #         # Store calibration in leveldb
-    #         self.node_db.put(b'calibration', bytes(calibration_string, 'utf-8'))
-
-    #         # Get it back
-    #         calibration = self.node_db.get(b'calibration')
-
-    #         self.calibration = json.loads(calibration.decode("utf-8"))
-            
-    #         print(self.calibration)
-    #         #print(json.loads(calibration.decode("utf-8")))
-
-
-    #         (lng, lat) = self.calibration_tracklets_queue.get()
-
-    #         print("From calibration_tracklets_queue")
-    #         print(lng, lat)
-
-
-    #     start_server = websockets.serve(hello, 'localhost', 8765)
-
-    #     asyncio.get_event_loop().run_until_complete(start_server)
-    #     asyncio.get_event_loop().run_forever()
-
         
     def calibration_socket_server_handler(self, socket, address):
-        # print('New connection from %s:%s' % address)
-        # print("ABOUT TO WAIT FOR CALIBRATION")
-        # calibration_string = socket.recv()
-        # print("calibration_string")
-        # print(calibration_string)
 
         calibration_bytes_object = socket.recv(4096)
         # print("calibration_bytes_object")
@@ -345,28 +250,12 @@ class RealWorldCoordinates:
 
         self.calibration = json.loads(calibration.decode("utf-8"))
 
-        # print(self.calibration)
 
         # Get camera frame dimensions (frame_dim). Could pull from database but this is easier
         tracking_frame_string = json.dumps(self.tracking_frame)
         # Send camera frame dimensions (frame_dim)
         socket.sendall(bytes(tracking_frame_string, 'utf-8'))
         
-        # socket.sendall(b'Welcome to the calibration_socket_server_handler server! Type quit to exit.\r\n')
-        # # using a makefile because we want to use readline()
-        # rfileobj = socket.makefile(mode='rb')
-        # while True:
-        #     line = rfileobj.readline()
-        #     if not line:
-        #         print("client disconnected")
-        #         break
-        #     if line.strip().lower() == b'quit':
-        #         print("client quit")
-        #         break
-        #     socket.sendall(line)
-        #     print("calibration_socket_server_handlered %r" % line)
-        # rfileobj.close()
-
 
     def call_gevent_wait(self):
         gevent.wait(timeout=1) # https://stackoverflow.com/a/10292950/8941739

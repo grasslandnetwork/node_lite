@@ -16,7 +16,6 @@ from queue import PriorityQueue
 from queue import Empty
 import requests
 import boto3
-import botocore
 from PIL import Image
 import json
 import sys
@@ -30,7 +29,6 @@ from pyimagesearch.trackableobject import TrackableObject
 import plyvel
 import s2sphere
 
-import websockets
 
 import gevent
 from gevent.server import StreamServer
@@ -208,7 +206,7 @@ def add_to_o_queue(detected_frame_tuple):
         
 
 
-print("NODE MODE IS", args['mode'])
+print("NODE IS IN '", args['mode'], "' MODE")
 # if a video path was not supplied, grab the reference to the web cam
 if not args.get("video", False):
     framerate = 30
