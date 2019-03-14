@@ -45,7 +45,7 @@ ap.add_argument("--display", type=int, default=1,
                 help="whether or not to display frames in UI")
 ap.add_argument("--video", type=str,
                 help="path to input video file")
-ap.add_argument("--picamera", type=int, default=-1,
+ap.add_argument("--picamera", type=int, default=0,
                 help="whether or not the Raspberry Pi camera should be used")
 ap.add_argument("--mode", type=str, default='ONLINE',
                 help="'ONLINE' or 'CALIBRATING'")
@@ -211,19 +211,18 @@ print("NODE IS IN '", args['mode'], "' MODE")
 if not args.get("video", False):
     framerate = 30
         
-    print("[INFO] starting video stream...")    
-    #vs = VideoStream(usePiCamera=args["picamera"], resolution=(800, 464), framerate=framerate).start() # Default to PiCamera
-    vs = VideoStream(usePiCamera=args["picamera"], resolution=(detection_frame_width, int(detection_frame_width*frame_ratio)), framerate=framerate).start() # Default to PiCamera
+    print("[INFO] starting camera stream...")    
+    vs = VideoStream(usePiCamera=args["picamera"], resolution=(detection_frame_width, int(detection_frame_width*frame_ratio)), framerate=framerate).start()
     print("[INFO] Warming up camera...")
     time.sleep(3)
     
     if args["picamera"] == 1 or args["picamera"] == True:
         vs.camera.rotation = args["rotation"]
     
-    # otherwise, grab a reference to the video file
-else:
+    
+else: # otherwise, grab a reference to the video file
     framerate = 30
-    #vs = cv2.VideoCapture(args["video"])
+    print("[INFO] starting video file stream...")    
     vs = FileVideoStream(args["video"], queueSize=15).start()
 
     # loop over frames from the video stream
