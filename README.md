@@ -1,6 +1,6 @@
 # Grassland Node_Lite
 
-### A Grassland mining node that can run on mini computers like the Raspberry Pi 3 or older desktops and laptops. This repo is the client side to the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda function which handles the node's object detections. 
+### A Grassland mining node that can run on mini computers or older desktops and laptops. This repo is the client side to the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda function which handles the node's object detections. 
 
 ### Installation
 #### Requires at least 4 GB's of RAM and Python 3.6 or greater. It's recommended that you use a Python virtual environment
@@ -24,9 +24,9 @@ Then return to the first terminal and type
   
   --display <0> | <1> [default: 0] "Displays the input video feed in console with tracked objects and bounding boxes. Useful for debugging the tracker and object detector. If not needed, do not use as it consumes uncessary computation."
   
-  --picamera <0> | <1> [default: 0] "By default, the computer's webcamera is used as input. If running on a Raspberry Pi, set this option to use the Pi's attached camera as input"
+  --picamera <0> | <1> [default: 0] "DEPRECATED: By default, the computer's webcamera is used as input. If running on a Raspberry Pi, set this option to use the Pi's attached camera as input"
   
-  --rotation (<0> | <90> | <180> | <270>) [default: 0] "If a Raspberry Pi camera is used for input instead of the webcamera (default), this specifies camera's clockwise rotation"
+  --rotation (<0> | <90> | <180> | <270>) [default: 0] "DEPRECATED: If a Raspberry Pi camera is used for input instead of the webcamera (default), this specifies camera's clockwise rotation"
   
   --video <path/to/video/file> "For debugging purposes, a video file can be used as input instead of an attached webcamera (default). This specifies path to video file
   

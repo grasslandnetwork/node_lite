@@ -41,20 +41,20 @@ frame_s3_bucket_name = os.environ['GRASSLAND_FRAME_S3_BUCKET']
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("--display", type=int, default=1,
-                help="whether or not to display frames in UI")
-ap.add_argument("--video", type=str,
-                help="path to input video file")
-ap.add_argument("--picamera", type=int, default=0,
-                help="whether or not the Raspberry Pi camera should be used")
 ap.add_argument("--mode", type=str, default='ONLINE',
-                help="'ONLINE' or 'CALIBRATING'")
+                help="'ONLINE' or 'CALIBRATING' [default: ONLINE]")
+ap.add_argument("--display", type=int, default=0,
+                help="Displays the input video feed in console with tracked objects and bounding boxes. Useful for debugging the tracker and object detector. If not needed, do not use as it consumes uncessary computation. [default: 0]")
+ap.add_argument("--picamera", type=int, default=0,
+                help="DEPRECATED: By default, the computer's webcamera is used as input. If running on a Raspberry Pi, set this option to use the Pi's attached camera as input. [default: 0]")
 ap.add_argument("--rotation", type=int, default=0,
-                help="Sets Rasperry Pi camera's clockwise rotation. Valid values are 0, 90, 180, and 270.")
-ap.add_argument("--tracker", type=str, default="mosse",
-                help="OpenCV object tracker type")
+                help="DEPRECATED: If a Raspberry Pi camera is used for input instead of the webcamera (default), this specifies camera's clockwise rotation. Valid values are 0, 90, 180, and 270. [default: 0]")
+ap.add_argument("--video", type=str,
+                help="For debugging purposes, a video file can be used as input. This specifies path to video file.")
 ap.add_argument("--num_workers", type=int, default=5,
-                help="Number of Workers")
+                help="For computers with multi-core CPU's, spreads tasks into separate processes to parralelize processes and speed up software [default: 5]")
+ap.add_argument("--tracker", type=str, default="mosse",
+                help="OpenCV object tracker type, [default: mosse]")
 args = vars(ap.parse_args())
 
 # initialize a dictionary that maps strings to their corresponding
