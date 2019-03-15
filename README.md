@@ -2,7 +2,7 @@
 
 ### A Grassland mining node that can run on mini computers or older desktops and laptops. This repo is the client side to the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda function which handles the node's object detections. 
 
-## Installation
+## Step 1: Installation
 #### Requires at least 4 GB's of RAM and Python 3.6 or greater and Node.js 8.10 or greater. It's recommended that you use a Python virtual environment
 
 ### Grassland Node Installation
@@ -29,7 +29,7 @@ To use the map, you will need a free Mapbox Access Token. You can get a free Map
 Make a note of your Mapbox token because we'll be using it later.
 
 
-## Running the Software
+## Step 2: Running the Software
 ### Start The Grassland Node
 
 Return to the first terminal to start the Grassland node. Type
@@ -60,14 +60,14 @@ Choose ```npm run dev-external``` if you want the server to bind to all IPv4 add
 
 After typing the above command, Webpack will begin bundling your software and your browser will automatically open to the map via port 3000.
 
-## CALIBRATING The Node
+## Step 3: Calibrate The Node
 
 Once the map loads, use your mouse's scroll wheel to zoom and the left and right mouse buttons to drag and rotate the map until you've adjusted your browsers view of the map to match the position and orientation of your camera in the real world. Once you've narrowed it down, click on the 'CALIBRATION' toggle button. The GUI's frame dimensions will adjust to match your camera frame's dimensions. Continue adjusting your position until it matches the position and orientation of the real precisely. 
 
 As you're adjusting, your node should be receiving new calibration measurements and placing tracked objects on the GUI's map. Continue adjusting while referring to the node's video display until objects tracked in the video display are in their correct positions in the GUI's map. Once that's done, click the 'CALIBRATION' toggle button again to turn CALIBRATING mode off.
 
 
-## Restart The Node in ONLINE Mode
+## Step 4: Restart The Node In 'ONLINE' Mode
 
 Then return to your first terminal, hold down Ctrl-C on your keyboard to stop the node, then restart the node in the default mode (ONLINE)
 
