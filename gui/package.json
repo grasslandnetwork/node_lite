@@ -4,14 +4,16 @@
 	"license": "MIT",
 	"private": true,
 	"main": "src/server/index.js",
+	"partial-credit": "https://github.com/crsandeep/simple-react-full-stack",
 	"scripts": {
-		"orig-start-local": "webpack-dev-server --env.local --progress --hot --open",
-		"orig-start": "webpack-dev-server --progress --hot --open",
+		"orig-start-localhost": "webpack-dev-server --progress --hot --open --env.HOST=localhost",
+		"orig-start-external": "webpack-dev-server --progress --hot --open --env.HOST=0.0.0.0",
 		"build": "webpack --mode production",
 		"start": "npm run build && node src/server/index.js",
 		"client": "webpack-dev-server --mode development --devtool inline-source-map --hot",
 		"server": "nodemon src/server/index.js",
-		"dev": "concurrently \"npm run server\" \"npm run orig-start\""
+		"dev-localhost": "concurrently \"npm run server\" \"npm run orig-start-localhost\"",
+		"dev-external": "concurrently \"npm run server\" \"npm run orig-start-external\""
 	},
 	"dependencies": {
 		"@deck.gl/experimental-layers": "^6.4.0",

@@ -150,7 +150,7 @@ export default class App extends Component {
 
 	_openCalFrameWebsocketConnection() {
 		try {
-			this.ws_send_cal_recv_frame = new WebSocket('ws://localhost:8080/send_calibration');
+			this.ws_send_cal_recv_frame = new WebSocket('ws://'+window.location.hostname+':8080/send_calibration');
 		} catch (e) {
 			console.log("error", e);
 		}
@@ -159,7 +159,7 @@ export default class App extends Component {
 	_openTrackletsWebsocketConnection() {
 		try {
 			console.log("Reconnecting to ws_get_tracklets");
-			this.ws_get_tracklets = new WebSocket('ws://localhost:8080/get_tracklets');
+			this.ws_get_tracklets = new WebSocket('ws://'+window.location.hostname+':8080/get_tracklets');
 		} catch(e) {
 			console.log("error", e);
 		}
