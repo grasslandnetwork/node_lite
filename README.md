@@ -29,7 +29,7 @@ To use the map, you will need a free Mapbox Access Token. You can get a free Map
 Make a note of your Mapbox token because we'll be using it later.
 
 
-## Step 2: Running the Software
+## Step 2: Run the Software
 ### Start The Grassland Node
 
 Return to the first terminal to start the Grassland node. Type
