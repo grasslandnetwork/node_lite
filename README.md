@@ -4,18 +4,17 @@
 
 
 ## Step 1: Installation
-#### Requires at least 4 GB's of RAM and Python 3.6 or greater and has been tested on Node.js 8.10. It's recommended that you use a Python [virtual environment and the virtual environment wrapper](https://docs.python-guide.org/dev/virtualenvs/)
+#### Requires at least 4 GB's of RAM, Python 3.6 or greater and Node.js 8.10 or greater. It's recommended that you use a Python [virtual environment and virtual environment wrapper](https://docs.python-guide.org/dev/virtualenvs/) to create a separate virtual environment for your package dependencies
 
-You will also need to have set up the
 
 ### Grassland Node Installation
 
-Clone this repo on your own machine. 'cd' to the project's root directory and install the required Python modules using
+Clone this repo on your own machine. 'cd' to the project's root directory and install the required Python packages using
 
 ```pip install -r requirements.txt```
 
 #### AWS Credentials
-This node version uses the [boto3](https://pypi.org/project/boto3/) (the Amazon Web Services (AWS) Software Development Kit) Python module to communicate with the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda instance to do the necessary object detections. If you haven't deployed that, please do so now by following the instructions in that repo.
+This node version uses the [boto3](https://pypi.org/project/boto3/) (the Amazon Web Services (AWS) Software Development Kit) Python package to communicate with the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda instance to do the necessary object detections. If you haven't deployed that, please do so now by following the instructions in that repo.
 
 You should have your AWS Access Key and AWS Secret Key as environment variables on your system by following the instructions on the Node Lite Object Detection [README](https://github.com/grasslandnetwork/node_lite_object_detection) 
 
