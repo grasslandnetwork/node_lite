@@ -1,9 +1,12 @@
 # Grassland Node_Lite
 
-### A Grassland mining node that can run on mini computers or older desktops and laptops. This repo is the client side to the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda function which handles the node's object detections. 
+### A Grassland mining node that can run on mini computers or older desktops and laptops. This repo is the client side to the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda function which handles the node's object detections.
+
 
 ## Step 1: Installation
-#### Requires at least 4 GB's of RAM and Python 3.6 or greater and Node.js 8.10 or greater. It's recommended that you use a Python virtual environment
+#### Requires at least 4 GB's of RAM and Python 3.6 or greater and has been tested on Node.js 8.10. It's recommended that you use a Python [virtual environment and the virtual environment wrapper](https://docs.python-guide.org/dev/virtualenvs/)
+
+You will also need to have set up the
 
 ### Grassland Node Installation
 
@@ -11,10 +14,31 @@ Clone this repo on your own machine. 'cd' to the project's root directory and in
 
 ```pip install -r requirements.txt```
 
+#### AWS Credentials
+This node version uses the [boto3](https://pypi.org/project/boto3/) (the Amazon Web Services (AWS) Software Development Kit) Python module to communicate with the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda instance to do the necessary object detections. If you haven't deployed that, please do so now by following the instructions in that repo.
+
+You should have your AWS Access Key and AWS Secret Key as environment variables on your system by following the instructions on the Node Lite Object Detection [README](https://github.com/grasslandnetwork/node_lite_object_detection) 
+
+```
+export AWS_ACCESS_KEY_ID=<your-key-here>
+export AWS_SECRET_ACCESS_KEY=<your-secret-key-here>
+export LAMBDA_DETECTION_URL=<your-lambda-url-here>
+
+# 'export' command is valid only for unix shells. In Windows - use 'set' instead of 'export'
+```
+
+You will now need to set the name of the S3 bucket you'll use to temporarily (they're deleted after detection) store the frames from your camera that will be used by the Lambda function for object detection as well as your AWS default region (e.g. ```us-east-1```) as environment variables
+
+```
+export AWS_DEFAULT_REGION=<your-default-region-here>
+export GRASSLAND_FRAME_S3_BUCKET=<your-s3-bucket-name-here>
+```
+
 
 ### Grassland GUI Installation
 
-You'll need to calibrate your node the first time you run it. So we'll also need to load the node's GUI (graphical user interface) which helps you visually calibrate the orientation of the node's camera in the real world.
+You'll need to calibrate your Grassland node the first time you run it by letting your node know where the camera its viewing is positioned in the real world. To do that easily we'll use the node GUI's (graphical user interface) simulated, 3D map of the world to virtually set a position and viewing angle that matches that of the camera in the real world. Your node will use this to automatically calculate the right calibration.
+
 
 Before we start the node, open a second bash terminal and cd to the projects 'gui' subfolder.
 
