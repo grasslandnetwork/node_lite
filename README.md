@@ -26,22 +26,7 @@ Once you've received your Mapbox token make a note of it and then return to the 
 
 ```python multi_object_tracking.py --mode CALIBRATING --display 1 [ --additional-options <arg> ]...```
 
-
-#### Multi Object Tracking Command Line Options:
-
---mode <ONLINE> | <CALIBRATING> [default: ONLINE] "If ONLINE, data is stored in main database. CALIBRATING is used for setting camera orientation in the map"
-  
---display <0> | <1> [default: 0] "Displays the input video feed in console with tracked objects and bounding boxes. Useful for debugging the tracker and object detector. If not needed, do not use as it consumes uncessary computation."
-  
---picamera <0> | <1> [default: 0] "DEPRECATED: By default, the computer's webcamera is used as input. If running on a Raspberry Pi, set this option to use the Pi's attached camera as input"
-  
---rotation (<0> | <90> | <180> | <270>) [default: 0] "DEPRECATED: If a Raspberry Pi camera is used for input instead of the webcamera (default), this specifies camera's clockwise rotation"
-  
---video <path/to/video/file> "For debugging purposes, a video file can be used as input instead of an attached webcamera (default). This specifies path to video file
-  
---num_workers <#> [default: 5] "For computers with multi-core CPU's, spreads tasks into separate processes to parralelize processes and speed up software"
-
-
+(See below for additional options)
 
 The software should start running and pause as it's waiting for you to set the calibration. Go back to your second ('gui') terminal in project's 'gui' directory and type either
 
@@ -67,9 +52,24 @@ As you're adjusting, your node should be receiving new calibration measurements 
 
 Then return to your first terminal, hold down Ctrl-C on your keyboard to stop the node, then restart the node in the default mode (ONLINE)
 
-```python multi_object_tracking.py [ --additional-options <arg> ]...``` See options above
+```python multi_object_tracking.py [ --additional-options <arg> ]...``` See additional options below
 
 
+
+
+#### Multi Object Tracking Command Line Options:
+
+--mode <ONLINE> | <CALIBRATING> [default: ONLINE] "If ONLINE, data is stored in main database. CALIBRATING is used for setting camera orientation in the map"
+  
+--display <0> | <1> [default: 0] "Displays the input video feed in console with tracked objects and bounding boxes. Useful for debugging the tracker and object detector. If not needed, do not use as it consumes uncessary computation."
+  
+--picamera <0> | <1> [default: 0] "DEPRECATED: By default, the computer's webcamera is used as input. If running on a Raspberry Pi, set this option to use the Pi's attached camera as input"
+  
+--rotation (<0> | <90> | <180> | <270>) [default: 0] "DEPRECATED: If a Raspberry Pi camera is used for input instead of the webcamera (default), this specifies camera's clockwise rotation"
+  
+--video <path/to/video/file> "For debugging purposes, a video file can be used as input instead of an attached webcamera (default). This specifies path to video file
+  
+--num_workers <#> [default: 5] "For computers with multi-core CPU's, spreads tasks into separate processes to parralelize processes and speed up software"
 
 
 
