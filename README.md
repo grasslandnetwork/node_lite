@@ -32,11 +32,21 @@ Then return to the first terminal and type
   
   --num_workers <#> [default: 5] "For computers with multi-core CPU's, spreads tasks into separate processes to parralelize processes and speed up software"
 
-The software should start running and pause as it's waiting for you to set the calibration. Go to the second terminal in project's 'gui' directory and type
+The software should start running and pause as it's waiting for you to set the calibration. Go to the second terminal in project's 'gui' directory and type either
 
-```npm run dev```
 
-After compilation, this will open up your browser to the map. 
+```npm run dev-localhost```
+or
+```npm run dev-external```
+
+Choose ```npm run dev-localhost``` to ensure your GUI server is only accessible to users on this computer via the loopback (localhost/127.0.0.1) interface 
+
+Choose ```npm run dev-external``` if you want the server to bind to all IPv4 addresses on the local machine making it also accesible to computers on the wider network if you're behind a router or to *any computer* on the internet if your computer is not behind a router and is connected directly to the internet
+
+### **Unless you know exactly what you're doing and understand the risks involved, it is highly recommended that you choose "npm run dev-localhost"**
+
+
+Once the webpack bundling is complete, your browser will automatically open to the map. 
 
 
 
