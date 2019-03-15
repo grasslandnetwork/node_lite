@@ -1,32 +1,29 @@
-* The calibrationToggleBox - the box around the calibrationToggle */
-.calibrationToggleBox {
+/* The calibrationToggleBox - the box around the calibrationToggle */
+.switch {
   position: relative;
   display: inline-block;
-  width: 60px;
+  float: right;
+  left: 267px;
+  top: 354px;
+  width: 254px;
   height: 34px;
 }
 
-/* Hide default HTML checkbox */
-.calibrationToggleBox input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
+.switch input {display:none;}
 
-/* The calibrationToggle */
-.calibrationToggle {
+.slider {
   position: absolute;
   cursor: pointer;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
+  background-color: #ca2222;
   -webkit-transition: .4s;
   transition: .4s;
 }
 
-.calibrationToggle:before {
+.slider:before {
   position: absolute;
   content: "";
   height: 26px;
@@ -38,25 +35,49 @@
   transition: .4s;
 }
 
-input:checked + .calibrationToggle {
-  background-color: #2196F3;
+input:checked + .slider {
+  background-color: #2ab934;
 }
 
-input:focus + .calibrationToggle {
+input:focus + .slider {
   box-shadow: 0 0 1px #2196F3;
 }
 
-input:checked + .calibrationToggle:before {
-  -webkit-transform: translateX(26px);
-  -ms-transform: translateX(26px);
-  transform: translateX(26px);
+input:checked + .slider:before {
+  -webkit-transform: translateX(55px);
+  -ms-transform: translateX(55px);
+  transform: translateX(55px);
 }
 
-/* Rounded calibrationToggles */
-.calibrationToggle.round {
+/*------ ADDED CSS ---------*/
+.on
+{
+  display: none;
+}
+
+.on, .off
+{
+  color: white;
+  position: absolute;
+  transform: translate(-50%,-50%);
+  top: 50%;
+  left: 50%;
+  font-size: 10px;
+  font-family: Verdana, sans-serif;
+}
+
+input:checked+ .slider .on
+{display: block;}
+
+input:checked + .slider .off
+{display: none;}
+
+/*--------- END --------*/
+
+/* Rounded sliders */
+.slider.round {
   border-radius: 34px;
 }
 
-.calibrationToggle.round:before {
-  border-radius: 50%;
-}
+.slider.round:before {
+  border-radius: 50%;}
