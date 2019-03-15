@@ -24,20 +24,24 @@ To use the map, you will need a free Mapbox Access Token. You can get a free Map
 
 Once you've received your Mapbox token make a note of it and then return to the first terminal to start your node. Type
 
-```python multi_object_tracking.py --mode CALIBRATING display 1 [ --additional-options <arg> ]...```
+```python multi_object_tracking.py --mode CALIBRATING --display 1 [ --additional-options <arg> ]...```
 
---Options <Arguments> Description
-  --mode <ONLINE> | <CALIBRATING> [default: ONLINE] "If ONLINE, data is stored in main database. CALIBRATING is used for setting camera orientation in the map"
+
+#### Multi Object Tracking Command Line Options:
+
+--mode <ONLINE> | <CALIBRATING> [default: ONLINE] "If ONLINE, data is stored in main database. CALIBRATING is used for setting camera orientation in the map"
   
-  --display <0> | <1> [default: 0] "Displays the input video feed in console with tracked objects and bounding boxes. Useful for debugging the tracker and object detector. If not needed, do not use as it consumes uncessary computation."
+--display <0> | <1> [default: 0] "Displays the input video feed in console with tracked objects and bounding boxes. Useful for debugging the tracker and object detector. If not needed, do not use as it consumes uncessary computation."
   
-  --picamera <0> | <1> [default: 0] "DEPRECATED: By default, the computer's webcamera is used as input. If running on a Raspberry Pi, set this option to use the Pi's attached camera as input"
+--picamera <0> | <1> [default: 0] "DEPRECATED: By default, the computer's webcamera is used as input. If running on a Raspberry Pi, set this option to use the Pi's attached camera as input"
   
-  --rotation (<0> | <90> | <180> | <270>) [default: 0] "DEPRECATED: If a Raspberry Pi camera is used for input instead of the webcamera (default), this specifies camera's clockwise rotation"
+--rotation (<0> | <90> | <180> | <270>) [default: 0] "DEPRECATED: If a Raspberry Pi camera is used for input instead of the webcamera (default), this specifies camera's clockwise rotation"
   
-  --video <path/to/video/file> "For debugging purposes, a video file can be used as input instead of an attached webcamera (default). This specifies path to video file
+--video <path/to/video/file> "For debugging purposes, a video file can be used as input instead of an attached webcamera (default). This specifies path to video file
   
-  --num_workers <#> [default: 5] "For computers with multi-core CPU's, spreads tasks into separate processes to parralelize processes and speed up software"
+--num_workers <#> [default: 5] "For computers with multi-core CPU's, spreads tasks into separate processes to parralelize processes and speed up software"
+
+
 
 The software should start running and pause as it's waiting for you to set the calibration. Go back to your second ('gui') terminal in project's 'gui' directory and type either
 
