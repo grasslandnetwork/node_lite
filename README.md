@@ -2,33 +2,47 @@
 
 ### A Grassland mining node that can run on mini computers or older desktops and laptops. This repo is the client side to the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda function which handles the node's object detections. 
 
-### Installation
-#### Requires at least 4 GB's of RAM and Python 3.6 or greater. It's recommended that you use a Python virtual environment
+## Installation
+#### Requires at least 4 GB's of RAM and Python 3.6 or greater and Node.js 8.10 or greater. It's recommended that you use a Python virtual environment
 
-Clone this repo on your own machine. 'cd' to the project's root directory and install the required modules using
+### Grassland Node Installation
+
+Clone this repo on your own machine. 'cd' to the project's root directory and install the required Python modules using
 
 ```pip install -r requirements.txt```
 
-### Running Your Node
+
+### Grassland GUI Installation
+
 You'll need to calibrate your node the first time you run it. So we'll also need to load the node's GUI (graphical user interface) which helps you visually calibrate the orientation of the node's camera in the real world.
 
 Before we start the node, open a second bash terminal and cd to the projects 'gui' subfolder.
 
 ```cd gui```
 
-This module uses Node.js version 8.10 or higher. If you have Node.js on your computer, in your terminal, type
+Then type
+
 ```npm install```
 
 To use the map, you will need a free Mapbox Access Token. You can get a free Mapbox Access token here -> https://docs.mapbox.com/help/glossary/access-token/
 
+Make a note of your Mapbox token because we'll be using it later.
 
-Once you've received your Mapbox token make a note of it and then return to the first terminal to start your node. Type
+
+## Running the Software
+### Start The Grassland Node
+
+Return to the first terminal to start the Grassland node. Type
 
 ```python multi_object_tracking.py --mode CALIBRATING --display 1 [ --additional-options <arg> ]...```
 
 (See below for additional options)
 
-The software should start running and pause as it's waiting for you to set the calibration. Go back to your second ('gui') terminal in project's 'gui' directory and type either
+The software should start running and pause as it's waiting for you to set the calibration through the GUI.
+
+### Start The GUI
+
+Go back to your second ('gui') terminal in project's 'gui' directory and type either
 
 
 ```MapboxAccessToken='your-Mapbox-token-here' npm run dev-localhost```
@@ -44,11 +58,16 @@ Choose ```npm run dev-external``` if you want the server to bind to all IPv4 add
 (Instead of typing ```MapboxAccessToken='your-Mapbox-token-here'``` each time you run your GUI, you can add that line to your ~/.bashrc file to make it a permanent environment variable)
 
 
-After typing the above command, Webpack will begin bundling your software and your browser will automatically open to the map via port 3000. 
+After typing the above command, Webpack will begin bundling your software and your browser will automatically open to the map via port 3000.
+
+## CALIBRATING The Node
 
 Once the map loads, use your mouse's scroll wheel to zoom and the left and right mouse buttons to drag and rotate the map until you've adjusted your browsers view of the map to match the position and orientation of your camera in the real world. Once you've narrowed it down, click on the 'CALIBRATION' toggle button. The GUI's frame dimensions will adjust to match your camera frame's dimensions. Continue adjusting your position until it matches the position and orientation of the real precisely. 
 
 As you're adjusting, your node should be receiving new calibration measurements and placing tracked objects on the GUI's map. Continue adjusting while referring to the node's video display until objects tracked in the video display are in their correct positions in the GUI's map. Once that's done, click the 'CALIBRATION' toggle button again to turn CALIBRATING mode off.
+
+
+## Restart The Node in ONLINE Mode
 
 Then return to your first terminal, hold down Ctrl-C on your keyboard to stop the node, then restart the node in the default mode (ONLINE)
 
@@ -57,7 +76,7 @@ Then return to your first terminal, hold down Ctrl-C on your keyboard to stop th
 
 
 
-#### Multi Object Tracking Command Line Options:
+## Multi Object Tracking Command Line Options:
 
 --mode <ONLINE> | <CALIBRATING> [default: ONLINE] "If ONLINE, data is stored in main database. CALIBRATING is used for setting camera orientation in the map"
   
