@@ -409,15 +409,18 @@ export default class App extends Component {
 			
 			<React.Fragment>
 				<div style={controlsWrapper}>
-				<div style={inlineClockStyleWrapper}>
 				<div id="timepicker" style={inlineClockStyle}>
 				</div>
-				</div>
 
-				<label className="calibrationToggleBox">
-				<input type="checkbox" onClick={this._onCalibrationToggleClick} />
-				<span className="calibrationToggle"></span>
+
+				<label className="switch">
+				<input type="checkbox" id="togBtn" onClick={this._onCalibrationToggleClick} />
+				<div className="slider round">
+				<span className="on">CALIBRATION MODE ON</span>
+				<span className="off">CALIBRATION MODE OFF</span>
+				</div>
 				</label>
+
 				</div>
 
 				<DeckGL
