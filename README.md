@@ -4,7 +4,7 @@
 
 
 ## Step 1: Installation
-#### Requires at least 4 GB's of RAM, Python 3.6 or greater and Node.js 8.10 or greater. It's recommended that you use a Python [virtual environment and virtual environment wrapper](https://docs.python-guide.org/dev/virtualenvs/) to create a separate virtual environment for your package dependencies
+#### Requires at least 4 GB's of RAM, Python 3.6 or greater and Node.js 8.10.0 or greater. It's recommended that you use a Python [virtual environment and virtual environment wrapper](https://docs.python-guide.org/dev/virtualenvs/) to create a separate virtual environment for your package dependencies
 
 
 ### Grassland Node Installation
@@ -47,7 +47,7 @@ Then type
 
 ```npm install```
 
-To use the map, you will need a free Mapbox Access Token. You can get a free Mapbox Access token here -> https://docs.mapbox.com/help/glossary/access-token/
+To use the map, you will need a free Mapbox Access Token. You can get a free Mapbox Access token here -> https://docs.mapbox.com/help/how-mapbox-works/access-tokens/
 
 Make a note of your Mapbox token because we'll be using it later.
 
