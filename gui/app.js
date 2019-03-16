@@ -6,7 +6,7 @@ import DeckGL, {PolygonLayer} from 'deck.gl';
 //import {TripsLayer} from '@deck.gl/experimental-layers';
 import TripsLayer from './src/client/trips-layer.js';
 
-import {MapboxLayer} from '@deck.gl/mapbox';
+//import {MapboxLayer} from '@deck.gl/mapbox';
 
 import {Timepicker} from './src/client/analog-clock-timepicker/libs/timepicker.js';
 
