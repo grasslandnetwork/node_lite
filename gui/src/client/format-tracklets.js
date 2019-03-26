@@ -38,7 +38,7 @@ export function formatTracklets(trackableObjectsArray, loopTime, loopLength) {
 
 	}
 
-	trackableObjectsArray = truncateTimestamp(trackableObjectsArray, loopTime, loopLength);
+	// trackableObjectsArray = truncateTimestamp(trackableObjectsArray, loopTime, loopLength);
 	return trackableObjectsArray;
 }
 
@@ -71,31 +71,32 @@ function truncateTimestamp(trackableObjectsArray, loopTime, loopLength) {
 }
 
 
-
-function interpolate(tracklets, clockTimestamp, ruler) {
-	for (var j=0; j < tracklets.length-1; j++) { // go through all the recorded coordinates of that trackable object
+export function interpolateTracklets(sortedTrackletsOfObject, clockTimestamp, ruler) { // argument is tracklets of single object that are sorted by timestamp (t1,t2 ...)
+	for (var j=0; j < sortedTrackletsOfObject.length-1; j++) { // go through all the recorded coordinates of that trackable object
 		
-		// console.log("tracklets[j].frame_timestamp");
-		// console.log(tracklets[j].frame_timestamp);
+		// console.log("sortedTrackletsOfObject[j].frame_timestamp");
+		// console.log(sortedTrackletsOfObject[j].frame_timestamp);
 		// console.log("clockTimestamp");
 		// console.log(clockTimestamp);
-		// console.log("clockTimestamp - tracklets[j].frame_timestamp");
-		// console.log(clockTimestamp - tracklets[j].frame_timestamp);
+		// console.log("clockTimestamp - sortedTrackletsOfObject[j].frame_timestamp");
+		// console.log(clockTimestamp - sortedTrackletsOfObject[j].frame_timestamp);
+
+		var useable = false;
 		
-		if (tracklets[j][2] <= clockTimestamp && clockTimestamp < tracklets[j+1][2]) { // if the clockTimestamp is between the timestamp of two successive coordinates..
+		if (sortedTrackletsOfObject[j][2] <= clockTimestamp && clockTimestamp < sortedTrackletsOfObject[j+1][2]) { // if the clockTimestamp is between the timestamp of two successive coordinates..
 
 			/* console.log("inside j");
 			   console.log(j); */
 
 			// .. set the local variables to these coordinates
-			start_timestamp = tracklets[j][2];
-			end_timestamp = tracklets[j+1][2];
+			var start_timestamp = sortedTrackletsOfObject[j][2];
+			var end_timestamp = sortedTrackletsOfObject[j+1][2];
 			
-			start_lng = tracklets[j][0];
-			start_lat = tracklets[j][1];
+			var start_lng = sortedTrackletsOfObject[j][0];
+			var start_lat = sortedTrackletsOfObject[j][1];
 			
-			end_lng = tracklets[j+1][0];
-			end_lat = tracklets[j+1][1];
+			var end_lng = sortedTrackletsOfObject[j+1][0];
+			var end_lat = sortedTrackletsOfObject[j+1][1];
 			
 			useable = true; // let the next block know it can run
 			
@@ -117,9 +118,43 @@ function interpolate(tracklets, clockTimestamp, ruler) {
 		// console.log(distance_along);
 		var point = ruler.along(line, distance_along);
 		
-		console.log("point");
-		console.log(point);
+		// console.log("point");
+		// console.log(point);
+
+		// return [point[0], point[1], clockTimestamp];
+		return {"lng": point[0], "lat": point[1]};
 		
+	} else {
+		return null;
+	}
+}
+
+export function interpolatePositionAndBearing(sortedTrackletsOfObject, clockTimestamp, ruler, inMilliseconds) { // Only to be used with tracklets sorted by timestamp (t1,t2 ...)
+
+	var advance;
+	var bearing;
+	
+	if (inMilliseconds == true) {
+		advance = 2;
+	} else {
+		advance = 0.002;
 	}
 
+	const interpolatedCurrentPosition = interpolateTracklets(sortedTrackletsOfObject, clockTimestamp, ruler);
+	// get the next position 
+	const interpolatedNextPosition = interpolateTracklets(sortedTrackletsOfObject, clockTimestamp+advance, ruler);
+
+	if (interpolatedCurrentPosition !== null && interpolatedNextPosition !== null) {
+		
+		// determine bearing
+		// ruler.bearing([longitude, latitude], [longitude, latitude]): Returns the bearing between two points in angles.
+		bearing = ruler.bearing( [interpolatedCurrentPosition.lng, interpolatedCurrentPosition.lat], [interpolatedNextPosition.lng, interpolatedNextPosition.lat] )
+
+		return [interpolatedCurrentPosition, bearing];
+
+	} else {
+		return [null, null];
+	}
+
+	
 }
