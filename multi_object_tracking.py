@@ -369,7 +369,6 @@ def tracklets_socket_server_handler(socket, address):
             {
                 "object_id": object_id,
                 "detection_class_id": trackableObject['detection_class_id'],
-                "vendor": trackableObject['detection_class_id'],
                 "tracklets": trackableObject['tracklets']
             }
         )
