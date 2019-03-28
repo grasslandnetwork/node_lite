@@ -114,8 +114,8 @@ Then return to your first terminal, hold down Ctrl-C on your keyboard to stop th
 --num_workers <#> [default: 5] "For computers with multi-core CPU's, spreads tasks into separate processes to parralelize processes and speed up software"
 
 
-## Additional Features That Need To Be Completed
-[Link to current list](https://gist.github.com/00hello/0199d393e872ed7645979f5daf7bd62c) of Grassland features and modules that need to be completed next
+## Future Grassland Software Improvements
+[Link to current list](https://gist.github.com/00hello/0199d393e872ed7645979f5daf7bd62c) of Grassland features and modules that will be built next
 
 
 ## License
