@@ -3,6 +3,9 @@
 ### A Grassland mining node that can run on mini computers or older desktops and laptops. This repo is the client side to the Serverless [Node Lite Object Detection](https://github.com/grasslandnetwork/node_lite_object_detection) AWS Lambda function which handles the node's object detections.
 
 
+If you have questions related to this software, search in the 'Issues' tab of this Github repo to see if it's been answered. If not, feel free to open a new issue and I'll get back to you as soon as I can.
+
+
 ## Step 1: Installation
 #### Requires at least 4 GB's of RAM, Python 3.6 or greater and Node.js 8.10.0 or greater. It's recommended that you use a Python [virtual environment and virtual environment wrapper](https://docs.python-guide.org/dev/virtualenvs/) to create a separate virtual environment for your package dependencies
 
