@@ -107,6 +107,7 @@ export default class App extends Component {
 
 		this.timepicker = new Timepicker();
 		this.waitingToReceiveTrackableObjects = false;
+		this.last_ws_get_tracklets = 0;
 		this.clockTimestamp;
 		this.last_query_timestamp = 0;
 		this.new_query_timestamp;
@@ -507,8 +508,15 @@ export default class App extends Component {
 			}
 			
 			this._interpolateTrackableObjects(this.state.trackableObjectsArray);
+
+			// set this.waitingToReceiveTrackableObjects to false if we've been waiting too long
+			const trackableObjectsTimeout = 4000;
+			if (rAFTimestamp - this.last_ws_get_tracklets > trackableObjectsTimeout)  { // if it's been too long since we last called ws_get_tracklets.send, change waitingToReceiveTrackableObjects to false just in case something happens and the event listener is never fired changing waitingToReceiveTrackableObjects back to false
+				this.waitingToReceiveTrackableObjects = false;
+			}
 			
 			if (!DEMO_MODE && !this.waitingToReceiveTrackableObjects) { // if we're NOT in DEMO_MODE and NOT currently waiting on a request for more trackableObjects
+
 
 				if (this.clockTimestamp < this.last_query_timestamp+15000 || this.clockTimestamp > this.last_query_timestamp+this.query_timestamp_range-15000)  { // we'll still get back the range of tracklets. This just makes sure we don't experience a gap while we're waiting
 
@@ -521,12 +529,15 @@ export default class App extends Component {
 
 					if (this.ws_get_tracklets.readyState == 1) {
 						this.ws_get_tracklets.send(JSON.stringify({"timestamp": this.new_query_timestamp, "range": this.query_timestamp_range})); // ask server for more trackableObjects
+
+						this.last_ws_get_tracklets = rAFTimestamp; // set the time we last called ws_get_tracklets
+						
 					} else if (this.ws_get_tracklets.readyState == 3) { // if it's closed, reopen
 						this._openTrackletsWebsocketConnection();
 					}
 
 
-					setTimeout(function(){ this.waitingToReceiveTrackableObjects = false; }, 4000); // set timeout to change waitingToReceiveTrackableObjects to false just in case something happens and the event listener is never fired changing waitingToReceiveTrackableObjects back to false
+					setTimeout(function(){ this.waitingToReceiveTrackableObjects = false; }, trackableObjectsTimeout); // set timeout to change waitingToReceiveTrackableObjects to false just in case something happens and the event listener is never fired changing waitingToReceiveTrackableObjects back to false
 
 				}
 			}

@@ -69,8 +69,8 @@ app.ws('/send_calibration', (ws, req) => {
 		});
 
 		client.on('timeout', function() {
-			// console.log('socket timeout');
-			client.end();
+			console.log('calibration socket timeout');
+			client.destroy(); // have to .destroy() on timeout. If just .end(), it won't reconnect if user doesn't refresh browser
 		});
 
 
@@ -141,8 +141,8 @@ app.ws('/get_tracklets', (ws, req) => {
 		});
 
 		client.on('timeout', function() {
-			console.log('socket timeout');
-			client.end();
+			console.log('tracklet socket timeout');
+			client.destroy(); // have to .destroy() on timeout. If just .end(), it won't reconnect if user doesn't refresh browser
 		});
 		
 	});
