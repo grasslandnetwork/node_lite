@@ -36,6 +36,15 @@ from gevent.queue import Queue as GeventQueue
 
 from multiprocessing import Value
 
+from pathlib import Path
+
+# Create .grassland folder in user's home directory
+try:
+    Path(str(Path.home())+'/.grassland').mkdir(parents=False, exist_ok=False)
+except FileExistsError:
+    # directory already exists
+    pass
+
 node_id = os.environ['NODE_ID']
 frame_s3_bucket_name = os.environ['GRASSLAND_FRAME_S3_BUCKET']
 
@@ -247,7 +256,7 @@ else:
 if args['mode'] == 'CALIBRATING':
     tracklets_db = plyvel.DB('/tmp/gl_tmp_tracklets_db/', create_if_missing=True)
 else:
-    tracklets_db = plyvel.DB('/tmp/gl_tracklets_db/', create_if_missing=True)
+    tracklets_db = plyvel.DB(str(Path.home())+'/.grassland/gl_tracklets_db/', create_if_missing=True)
 
 # Use current eon number for LevelDB prefix to partition database
 # https://plyvel.readthedocs.io/en/latest/user.html#prefixed-databases
