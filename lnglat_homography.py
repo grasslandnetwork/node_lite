@@ -9,7 +9,7 @@ from multiprocessing import Queue, Pool
 import gevent
 from gevent.server import StreamServer
 import time
-
+from pathlib import Path
 
 class MyException(Exception):
     pass
@@ -18,7 +18,7 @@ class RealWorldCoordinates:
     def __init__(self, tracking_frame):
         
         # Create node's personal leveldb database if missing
-        self.node_db = plyvel.DB('/tmp/node_db/', create_if_missing=True)
+        self.node_db = plyvel.DB(str(Path.home())+'/.grassland/node_db/', create_if_missing=True)
         self.CALIBRATING = False
         self.tracking_frame = tracking_frame
         self.calibration = {}
