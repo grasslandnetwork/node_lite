@@ -389,6 +389,9 @@ def tracklets_socket_server_handler(socket, address):
         #print(str(trackable_object_list))
     else:
         socket.sendall(bytes(str([]), 'utf-8')) # send an empty list
+
+
+    return True # Must return something otherwise gevent base server socket won't get closed and we'll end up with zombie sockets
         
 
 #### !!! WARNING !!! --> If writing to LevelDB in this loop, only run this in one process and avoid threads unless you use locking
