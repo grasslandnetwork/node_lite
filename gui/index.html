@@ -16,6 +16,20 @@
 	<div id="app"></div>
 </body>
 <script type="text/javascript" src="/app.js"></script>
+
+<script type="text/javascript">
+ // prevent right click menu from opening
+ if (document.addEventListener) { // IE >= 9; other browsers
+     document.addEventListener('contextmenu', function(e) {
+         e.preventDefault();
+     }, false);
+ } else { // IE < 9
+     document.attachEvent('oncontextmenu', function() {
+         window.event.returnValue = false;
+     });
+ }
+</script>
+
 <script type="text/javascript">
  App.renderToDOM(document.getElementById('app'));
 </script>
