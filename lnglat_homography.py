@@ -210,6 +210,7 @@ class RealWorldCoordinates:
                         break
                         
             else:
+                print(calibration.decode("utf-8"))
                 self.calibration = json.loads(calibration.decode("utf-8"))
 
         else:

@@ -45,7 +45,6 @@ except FileExistsError:
     # directory already exists
     pass
 
-node_id = os.environ['NODE_ID']
 frame_s3_bucket_name = os.environ['GRASSLAND_FRAME_S3_BUCKET']
 
 # construct the argument parser and parse the arguments
@@ -272,6 +271,7 @@ else:
     
 run_tracking_loop = Value('i', 0)
 run_detection_loop = Value('i', 0)
+run_tracklets_loop = Value('i', 0)
 
 count_read_frame = 0
 count_write_frame = 1
@@ -292,31 +292,6 @@ print("Sending Wakeup Ping to Lambda function")
 requests.get(lambda_url)
 print("Waiting "+str(lambda_wakeup_duration)+" seconds for function to wake up...")
 time.sleep(lambda_wakeup_duration)
-
-gl_api_endpoint = os.environ['GRASSLAND_API_ENDPOINT']
-
-def post_tracklet(tracklets_dict):
-    post_tracklet_start_time = time.time()
-
-    print("Making request on lambda")
-    if args['mode'] == 'ONLINE':
-        tracklets_dict['node_mode'] = 'ONLINE'
-        response = requests.post(gl_api_endpoint+"tracklets_create", json=tracklets_dict)
-    elif args['mode'] == 'CALIBRATING':
-        tracklets_dict['node_mode'] = 'CALIBRATING'
-        response = requests.post(gl_api_endpoint+"tracklets_create", json=tracklets_dict)
-
-
-    end_time = time.time()
-
-    print("TRACKLET ROUND TRIP TIME:", end_time-post_tracklet_start_time)
-
-    if args['mode'] == 'CALIBRATING': # To compare to when frames show up on server
-        try:
-            print("TRACKLET 'frame_timestamp'", tracklets_dict['tracklets'][0]['frame_timestamp'])
-        except:
-            pass
-
 
 
 
@@ -398,6 +373,12 @@ def tracklets_socket_server_handler(socket, address):
 # ... https://github.com/google/leveldb/blob/master/doc/index.md#concurrency
 #### !!! WARNING !!! --> Store s2sphere in bigendian format to order bytes lexicographically in LevelDB
 def tracklets_loop():
+
+    if run_tracklets_loop.value:
+        print("STARTING TRACKLETS_LOOP")
+    else:
+        return
+
     try:
 
 
@@ -408,7 +389,7 @@ def tracklets_loop():
 
         print("STARTING TRACKLETS_LOOP")
 
-        while True:
+        while run_tracklets_loop.value:
 
             try:
                 
@@ -494,14 +475,28 @@ def tracklets_loop():
 
 
             except Empty:
-                print("tracklets_queue empty error")                        
+                print("tracklets_queue empty error")
+
+                if run_tracklets_socket_server.value == 0:
+                    tracklets_socket_server.stop(timeout=3)
+                    
+                run_tracklets_loop.value = 0
+
+                raise
             except KeyboardInterrupt:
-                import traceback
-                traceback.print_exc()
+                if run_tracklets_socket_server.value == 0:
+                    tracklets_socket_server.stop(timeout=3)
+                run_tracklets_loop.value = 0
+
                 raise                
             except:
+                if run_tracklets_socket_server.value == 0:
+                    tracklets_socket_server.stop(timeout=3)
+                run_tracklets_loop.value = 0
+                
                 import traceback
                 traceback.print_exc()
+                raise
 
     except KeyboardInterrupt:
         import traceback
@@ -509,8 +504,10 @@ def tracklets_loop():
         raise                
     except:
         import traceback
-        traceback.print_exc()
+        traceback.print_exc()        
+        raise
 
+                                         
 
     
 def tracking_loop():
@@ -1104,8 +1101,6 @@ def detection_loop():
             except Empty:
                 print("i_queue empty error")                        
             except KeyboardInterrupt:
-                import traceback
-                traceback.print_exc()
                 raise                
             except:
                 import traceback
@@ -1137,6 +1132,7 @@ dl = multiprocessing.Process(target=detection_loop)
 dl.daemon = True
 dl.start()
 
+run_tracklets_loop.value = 1            
 tsl = multiprocessing.Process(target=tracklets_loop)
 tsl.daemon = True
 tsl.start()
@@ -1359,7 +1355,7 @@ finally:
     print("[INFO] approx. Main FPS: {:.2f}".format(main_fps.fps()))
     #print("[INFO] approx. Tracking_Loop FPS: {:.2f}".format(tracking_loop_fps.fps()))
 
-
+    sys.exit()
 
 
 
