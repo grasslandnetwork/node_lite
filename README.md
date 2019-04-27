@@ -7,7 +7,7 @@ If you have questions related to this software, search in the 'Issues' tab of th
 
 
 ## Step 1: Installation
-#### Requires at least 4 GB's of RAM, Python 3.6 or greater and Node.js 8.10.0 or greater. It's recommended that you use a Python [virtual environment and virtual environment wrapper](https://docs.python-guide.org/dev/virtualenvs/) to create a separate virtual environment for your package dependencies
+#### Developed and tested on Ubuntu 16.04 and Raspbian (a rebuild of Debian) 9 Stretch. Requires at least 4 GB's of RAM (Slower hardware like Rasberry Pi's can run software locally but aren't powerful enough for mining at mainnet speed requirements), Python 3.6 or greater and Node.js 8.10.0 or greater. It's recommended that you use a Python [virtual environment and virtual environment wrapper](https://docs.python-guide.org/dev/virtualenvs/) to create a separate virtual environment for your package dependencies
 
 
 ### Grassland Node Installation
@@ -90,7 +90,11 @@ After typing the above command, Webpack will begin bundling your software and yo
 
 Once the map loads, use your mouse's scroll wheel to zoom and the left and right mouse buttons to drag and rotate the map until you've adjusted your browsers view of the map to match the position and orientation of your camera in the real world. Once you've narrowed it down, click on the 'CALIBRATION' toggle button. The GUI's frame dimensions will adjust to match your camera frame's dimensions. Continue adjusting your position until it matches the position and orientation of the real precisely. 
 
-As you're adjusting, your node should be receiving new calibration measurements and placing tracked objects on the GUI's map. Continue adjusting while referring to the node's video display until objects tracked in the video display are in their correct positions in the GUI's map. Once that's done, click the 'CALIBRATION' toggle button again to turn CALIBRATING mode off.
+As you're adjusting, your node should be receiving new calibration measurements and placing tracked objects on the GUI's map. Continue adjusting while referring to the node's video display until objects tracked in the video display are in their correct positions in the GUI's map.
+
+In other words, you should have the video window that shows you the video that's streaming from the camera up on your computer screen (because the command you used to start the node included the "--display 1" option). Using your mouse, align the virtual map's viewport so it's looking from exact the same vantage point (latitiude, longitude, altitude, angle etc.) as the real camera is in real life.
+
+Once that's done, your calibration values should be set inside the node's database. Now click the 'CALIBRATION' toggle button again to turn CALIBRATING mode off.
 
 
 ## Step 4: Restart The Node In 'ONLINE' Mode
