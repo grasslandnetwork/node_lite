@@ -1,3 +1,15 @@
+# Copyright (C) 2018-2019 David Thompson
+#
+# This file is part of Grassland
+#
+# It is subject to the license terms in the LICENSE file found in the top-level
+# directory of this distribution.
+#
+# No part of Grassland, including this file, may be copied, modified,
+# propagated, or distributed except according to the terms contained in the
+# LICENSE file.
+
+
 # import the necessary packages
 from imutils.video import VideoStream
 from imutils.video import FileVideoStream
