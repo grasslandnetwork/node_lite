@@ -11,7 +11,7 @@ imutils==0.4.6
 jmespath==0.9.4
 numpy==1.16.2
 opencv-contrib-python==3.4.1.15
-Pillow==5.4.1
+Pillow==6.2.0
 plyvel==1.0.5
 python-dateutil==2.8.0
 requests==2.21.0
