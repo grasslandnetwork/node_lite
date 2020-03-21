@@ -1,4 +1,4 @@
-# Taken from https://github.com/tensorflow/models/blob/master/research/object_detection/utils/visualization_utils.py
+# Modified from https://github.com/tensorflow/models/blob/master/research/object_detection/utils/visualization_utils.py
 import collections
 import numpy as np
 import PIL.Image as Image
