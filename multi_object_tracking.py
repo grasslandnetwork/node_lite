@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2019 David Thompson
+# Copyright (C) 2018-2020 David Thompson
 #
 # This file is part of Grassland
 #
@@ -154,22 +154,23 @@ def get_detections(frame_number, frame, frame_timestamp, no_callback=False):
 
         image.save(file_path)
 
-        print("Uploading image file to s3")
+        # print("Uploading image file to s3")
         image_start_time = time.time()
         s3_bucket.upload_file(file_path, file_name_ext)
-        print("S3 Upload Time:", time.time()-image_start_time)
+        # print("S3 Upload Time:", time.time()-image_start_time)
 
-        print("Making request on lambda")
+        # print("Making request on lambda")
         response = requests.get(lambda_url+"?bucket="+frame_s3_bucket_name+"&key="+file_name_ext)
 
         end_time = time.time()
 
-        print("ROUND TRIP TIME:", end_time-image_start_time)
+        # print("ROUND TRIP TIME:", end_time-image_start_time)
 
         response_dict = json.loads(response.text)
 
         output_dict = response_dict['prediction_result']
 
+        # Convert from Python lists back to Numpy arrays
         detection_boxes = np.array(output_dict['detection_boxes'])
         detection_scores = np.array(output_dict['detection_scores'])
         detection_classes = np.array(output_dict['detection_classes'])
@@ -309,7 +310,7 @@ time.sleep(lambda_wakeup_duration)
 
 # this handler will be run for each incoming connection in a dedicated greenlet
 def tracklets_socket_server_handler(socket, address):
-    # print('New connection for tracklets from %s:%s' % address)
+    print('New connection for tracklets_socket_server from %s:%s' % address)
 
     # Read socket query
     query_dict =  json.loads(socket.recv(4096).decode('utf-8'))
@@ -318,12 +319,12 @@ def tracklets_socket_server_handler(socket, address):
     query_timestamp = int(query_timestamp)
     query_range = int(query_range)
 
+    print("query_timestamp", query_timestamp)
 
     trackableObjects = {}
     for key, val in eon_tracklets_db:
         if query_timestamp <= int.from_bytes(key[8:], byteorder=s2sphere_byteorder) < query_timestamp+query_range:
-            # print("query_timestamp")
-            # print(query_timestamp)
+            # print("query_timestamp", query_timestamp)
             # print('int.from_bytes(key[8:], byteorder=s2sphere_byteorder)')
             # print(int.from_bytes(key[8:], byteorder=s2sphere_byteorder))
             # print("------------------------------------------")
@@ -472,6 +473,7 @@ def tracklets_loop():
                     if args['mode'] == 'CALIBRATING': # If we're in calibration mode show user the frame_timestamp
                         print("last frame_timestamp")
                         my_tz = datetime.now(timezone.utc).astimezone().tzinfo # Get local timezone
+                        print("current timezone", my_tz)
                         print( datetime.fromtimestamp(frame_timestamp/1000, my_tz).strftime("%B %d, %Y %I:%M %p") )
 
 
@@ -540,7 +542,6 @@ def tracking_loop():
 
         ct = CentroidTracker(maxDisappeared=10, maxDistance=tracking_frame_width/20)
         trackableObjects = {}
-        
         
         while run_tracking_loop.value:
             # Pull first/next frame tuple from p_queue
@@ -1149,6 +1150,8 @@ tsl = multiprocessing.Process(target=tracklets_loop)
 tsl.daemon = True
 tsl.start()
 
+tl = multiprocessing.Process(target=tracking_loop)
+
 
 #pool = Pool(1, detection_loop)
 #pool.apply_async(func=detection_loop, args=())
@@ -1177,6 +1180,7 @@ try:
         # check to see if we have reached the end of the stream
         if frame is None:
             print("REACHED END OF CAMERA/VIDEO STREAM")
+            run_feed_loop = False
             break
 
         # If we use threading (imutils.video.VideoStream/FileVideoStream), then we don't want to process the same frame twice
@@ -1276,7 +1280,7 @@ try:
             # t.start()
             #tracking_pool = Pool(1, tracking_loop)
             
-            tl = multiprocessing.Process(target=tracking_loop)
+            # tl = multiprocessing.Process(target=tracking_loop)
             tl.start()
 
 
@@ -1289,23 +1293,17 @@ try:
         #print("FEED LOOP TIME:", feed_loop_end_time-feed_loop_start_time)
 
 
+    # Runs when execution leaves run_feed_loop and moves down here
+    if args['mode'] == 'CALIBRATING': # DO NOT TERMINATE tracking_loop! Because for some reason tracklets_socket_server keeps running but isn't queryable
+        print("CALIBRATION mode keeps socket servers and tracking_loop running waiting for KeyboardInterrupt from user...")
 
-    if args['mode'] == 'CALIBRATING':
-        print("CALIBRATION mode keeps socket servers running waiting for KeyboardInterrupt from user...")
-      
         while True:
             try:
-                
+
                 if dl.is_alive() and run_detection_loop.value == 0: 
                     print("TERMINATING detection_loop")
                     dl.terminate()
                     time.sleep(4)
-
-                if tl.is_alive() and run_tracking_loop.value == 0:
-                    print("TERMINATING tracking_loop")
-                    tl.terminate()
-                    time.sleep(4)
-                    
 
             except:
                 raise
